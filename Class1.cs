@@ -1,6 +1,7 @@
 ﻿using Gallop;
 using Newtonsoft.Json.Linq;
 using Spectre.Console;
+using System.IO.Compression;
 using System.Text;
 using UmamusumeResponseAnalyzer;
 using UmamusumeResponseAnalyzer.Plugin;
@@ -11,13 +12,15 @@ namespace WinSaddleAnalyzer
 {
     public class WinSaddleAnalyzer : IPlugin
     {
-        public string Name => "显示胜鞍";
+        [PluginDescription("显示殿堂马&好友种马信息")]
+        public string Name => "WinSaddleAnalyzer";
         public string Author => "离披";
         public Version Version => new(1, 0, 0, 0);
+        public string[] Targets => [];
 
-        [PluginSetting("显示顺序: 0为从老到新，1是从高胜鞍到低胜鞍，2是从高分到低分")]
+        [PluginSetting, PluginDescription("显示顺序: 0为从老到新，1是从高胜鞍到低胜鞍，2是从高分到低分")]
         public int DisplayOrder { get; set; } = 0;
-        [PluginSetting("是否只显示收藏了的马")]
+        [PluginSetting, PluginDescription("是否只显示收藏了的马")]
         public bool OnlyFavourites { get; set; } = false;
 
         [Analyzer]
@@ -166,7 +169,7 @@ namespace WinSaddleAnalyzer
                 var sb = new StringBuilder();
                 sb.Append(FactorName(even[index]));
                 var gap = 12 + max - GetRenderWidth(Database.FactorIds[even[index]]);
-                if (gap < 0) gap = 2;                 sb.Append(string.Join(string.Empty, Enumerable.Repeat(' ', gap)));
+                if (gap < 0) gap = 2; sb.Append(string.Join(string.Empty, Enumerable.Repeat(' ', gap)));
                 sb.Append(odd.Length > index ? FactorName(odd[index]) : "");
                 tree.AddNode(sb.ToString());
             }
@@ -190,6 +193,42 @@ namespace WinSaddleAnalyzer
 
         public async Task UpdatePlugin(ProgressContext ctx)
         {
+            var progress = ctx.AddTask($"[{Name}] 更新");
+
+            using var client = new HttpClient();
+            using var resp = await client.GetAsync($"https://api.github.com/repos/URA-Plugins/{Name}/releases/latest");
+            var json = await resp.Content.ReadAsStringAsync();
+            var jo = JObject.Parse(json);
+
+            var isLatest = ("v" + Version.ToString()).Equals("v" + jo["tag_name"]?.ToString());
+            if (isLatest)
+            {
+                progress.Increment(progress.MaxValue);
+                progress.StopTask();
+                return;
+            }
+            progress.Increment(25);
+
+            var downloadUrl = jo["assets"][0]["browser_download_url"].ToString();
+            if (Config.Updater.IsGithubBlocked && !Config.Updater.ForceUseGithubToUpdate)
+            {
+                downloadUrl = downloadUrl.Replace("https://", "https://gh.shuise.dev/");
+            }
+            using var msg = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+            using var stream = await msg.Content.ReadAsStreamAsync();
+            var buffer = new byte[8192];
+            while (true)
+            {
+                var read = await stream.ReadAsync(buffer);
+                if (read == 0)
+                    break;
+                progress.Increment(read / msg.Content.Headers.ContentLength ?? 1 * 0.5);
+            }
+            using var archive = new ZipArchive(stream);
+            archive.ExtractToDirectory(Path.Combine("Plugins", Name), true);
+            progress.Increment(25);
+
+            progress.StopTask();
         }
     }
 }

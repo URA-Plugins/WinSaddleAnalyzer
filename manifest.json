@@ -1,0 +1,13 @@
+{
+  "Author": "离披",
+  "InternalName": "WinSaddleAnalyzer",
+  "Name": "显示殿堂马&好友种马信息",
+  "Description": "",
+  "Changelog": "",
+  "Version": "1.0.0",
+  "Dependencies": [],
+  "Targets": [],
+  "RepositoryUrl": "https://github.com/URA-Plugins/WinSaddleAnalyzer",
+  "DownloadUrl": "https://gh.shuise.dev/github.com/URA-Plugins/WinSaddleAnalyzer/releases/latest/download/WinSaddleAnalyzer.zip",
+  "LastUpdate": "1751719983"
+}
