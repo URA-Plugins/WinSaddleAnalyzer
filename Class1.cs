@@ -1,36 +1,112 @@
 ﻿using Gallop;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Spectre.Console;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
 using UmamusumeResponseAnalyzer;
 using UmamusumeResponseAnalyzer.Plugin;
-using static WinSaddleAnalyzer.i18n.ParseFriendSearchResponse;
 using static WinSaddleAnalyzer.i18n.ParseTrainedCharaLoadResponse;
 
 namespace WinSaddleAnalyzer
 {
-    public class WinSaddleAnalyzer : IPlugin
+    public partial class WinSaddleAnalyzer : IPlugin
     {
         [PluginDescription("显示殿堂马&好友种马信息")]
         public string Name => "WinSaddleAnalyzer";
         public string Author => "离披";
-        public Version Version => new(1, 0, 0, 0);
+        public Version Version => Assembly.GetExecutingAssembly().GetName().Version ?? new();
         public string[] Targets => [];
 
         [PluginSetting, PluginDescription("显示顺序: 0为从老到新，1是从高胜鞍到低胜鞍，2是从高分到低分")]
         public int DisplayOrder { get; set; } = 0;
         [PluginSetting, PluginDescription("是否只显示收藏了的马")]
-        public bool OnlyFavourites { get; set; } = false;
+        public bool OnlyFavourites { get; set; } = true;
+
+        [PluginSetting, PluginDescription("要养的马的CharaId")]
+        public int TargetHorseId { get; set; } = 0;
+        [PluginSetting, PluginDescription("另一个种马的TrainedCharaId")]
+        public int ParentHorseId { get; set; } = 0;
+
+        internal string PLUGIN_DATA_DIRECTORY = string.Empty;
+        internal string TRAINED_CHARA_FILEPATH = string.Empty;
+        internal string FACTOR_EFFECT_FILEPATH = string.Empty;
+        internal TrainedChara[] TrainedChara = [];
+        internal Dictionary<int, string> FactorEffects = [];
+        internal Dictionary<string, double> SkillEffects = [];
+        /// <summary>
+        /// 指定的前提种马
+        /// </summary>
+        internal static TrainedChara Parent { get; set; } = default!;
+
+        public void Initialize()
+        {
+            PLUGIN_DATA_DIRECTORY = Path.Combine("PluginData", Name);
+            Directory.CreateDirectory(PLUGIN_DATA_DIRECTORY);
+            TRAINED_CHARA_FILEPATH = Path.Combine(PLUGIN_DATA_DIRECTORY, "trained_chara.json");
+            TrainedChara = File.Exists(TRAINED_CHARA_FILEPATH)
+                ? JsonConvert.DeserializeObject<TrainedChara[]>(File.ReadAllText(TRAINED_CHARA_FILEPATH)) ?? []
+                : [];
+            FACTOR_EFFECT_FILEPATH = Path.Combine(PLUGIN_DATA_DIRECTORY, "factor_effects.br");
+            var factorEffects = JArray.Parse(Encoding.UTF8.GetString(Brotli.Decompress(File.ReadAllBytes(FACTOR_EFFECT_FILEPATH))));
+            foreach (var effect in factorEffects)
+            {
+                var id = effect["index"].ToInt();
+                var text = effect["text"].ToString();
+                var skill = FactorEffectRegex().Match(text).Groups[1].Value;
+                if (!string.IsNullOrEmpty(skill))
+                {
+                    skill = skill.Replace("○", "◎");
+                    FactorEffects.Add(id, skill);
+                }
+            }
+            Parent = TrainedChara.FirstOrDefault(x => x.trained_chara_id == ParentHorseId)!;
+
+            var sep = PluginManager.LoadedPlugins.FirstOrDefault(x => x.Name == "SkillEffectPlugin");
+            if (sep != default)
+            {
+                var plugin = (dynamic)sep;
+                var effects = (Dictionary<UmamusumeResponseAnalyzer.Entities.SkillData, double>)plugin.Effects;
+                SkillEffects = effects.ToDictionary(x => x.Key.Name, x => x.Value);
+            }
+        }
 
         [Analyzer]
         public void Analyze(JObject jo)
         {
             if (!jo.ContainsKey("data")) return;
             var data = jo["data"] as JObject;
+            if (data.ContainsKey("common_define") && data.ContainsKey("trained_chara"))
+            {
+                var obj = data["trained_chara"].ToObject<TrainedChara[]>();
+                TrainedChara = obj;
+                File.WriteAllText(TRAINED_CHARA_FILEPATH, JsonConvert.SerializeObject(obj));
+            }
+            if (data.ContainsKey("single_mode_start_common") && data["single_mode_start_common"].ContainsKey("add_trained_chara_array"))
+            {
+                var singleModeStartCommon = data["single_mode_start_common"];
+                var charaInfo = singleModeStartCommon["chara_info"];
+                TargetHorseId = int.Parse(charaInfo["card_id"].ToString()[..4]);
+                var successionTrainedCharaIdDad = charaInfo["succession_trained_chara_id_1"].ToObject<int>();
+                var successionTrainedCharaIdMom = charaInfo["succession_trained_chara_id_2"].ToObject<int>();
+                var addTrainedCharaArray = singleModeStartCommon["add_trained_chara_array"];
+                var rentalHorse = (addTrainedCharaArray.FirstOrDefault(x => x["trained_chara_id"].ToObject<int>() == successionTrainedCharaIdDad) ?? addTrainedCharaArray.FirstOrDefault(x => x["trained_chara_id"].ToObject<int>() == successionTrainedCharaIdMom))?.ToObject<TrainedChara>();
+                rentalHorse ??= TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdDad) ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdMom);
+                var mineHorse = TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdDad) ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdMom);
+                ParentHorseId = mineHorse.trained_chara_id;
+                CalculateRelation(rentalHorse, mineHorse);
+            }
             if (data.ContainsKey("trained_chara_array") && data.ContainsKey("trained_chara_favorite_array") && data.ContainsKey("room_match_entry_chara_id_array"))
             {
-                AnalyzeTrainedCharaLoadResponse(jo);
+                var obj = jo.ToObject<TrainedCharaLoadResponse>()?.data;
+                if (obj is not null)
+                {
+                    TrainedChara = obj.trained_chara_array;
+                    Parent = TrainedChara.FirstOrDefault(x => x.trained_chara_id == ParentHorseId)!;
+                    File.WriteAllText(TRAINED_CHARA_FILEPATH, JsonConvert.SerializeObject(obj.trained_chara_array));
+                    AnalyzeTrainedCharaLoadResponse(obj);
+                }
                 return;
             }
             if (data.ContainsKey("user_info_summary"))
@@ -42,15 +118,13 @@ namespace WinSaddleAnalyzer
             }
         }
 
-        void AnalyzeTrainedCharaLoadResponse(JObject jo)
+        void AnalyzeTrainedCharaLoadResponse(TrainedCharaLoadResponse.CommonResponse data)
         {
-            dynamic dyn = jo;
-            var data = ((TrainedCharaLoadResponse)dyn.ToObject<TrainedCharaLoadResponse>()).data;
             var fav_ids = data.trained_chara_favorite_array.Select(x => x.trained_chara_id).ToList();
             var chara = OnlyFavourites
                 ? data.trained_chara_array.Where(x => x.is_locked == 1 && fav_ids.Contains(x.trained_chara_id))
                 : data.trained_chara_array;
-            var win_saddle_result = new List<(string Name, int WinSaddleBonus, string WinSaddleArray, int Score, string CreateTime)>();
+            var win_saddle_result = new List<(string Name, int TrainedCharaId, int WinSaddleBonus, int Score, string CreateTime)>();
             foreach (var i in chara)
             {
                 var charaWinSaddle = i.win_saddle_id_array.Intersect(Database.SaddleIds);
@@ -58,7 +132,7 @@ namespace WinSaddleAnalyzer
                 var parentWinSaddle_b = i.succession_chara_array[1].win_saddle_id_array.Intersect(Database.SaddleIds);
                 var win_saddle = charaWinSaddle.Intersect(parentWinSaddle_a).Count() * 3
                     + charaWinSaddle.Intersect(parentWinSaddle_b).Count() * 3;
-                win_saddle_result.Add((Database.Names.GetUmamusume(i.card_id).FullName, win_saddle, string.Join(',', charaWinSaddle), i.rank_score, i.create_time));
+                win_saddle_result.Add((Database.Names.GetUmamusume(i.card_id).FullName, i.trained_chara_id, win_saddle, i.rank_score, i.create_time));
             }
             switch (DisplayOrder)
             {
@@ -82,120 +156,22 @@ namespace WinSaddleAnalyzer
             {
                 Border = TableBorder.Ascii
             };
-            table.AddColumns(I18N_UmaName, I18N_WinSaddleBonus, i18n.ParseFriendSearchResponse.I18N_WinSaddle, I18N_Score);
-            foreach (var (Name, WinSaddleBonus, WinSaddleArray, Score, _) in win_saddle_result)
-                table.AddRow(Name.EscapeMarkup(), WinSaddleBonus.ToString(), WinSaddleArray, Score.ToString());
+            table.AddColumns(I18N_UmaName, "TrainedCharaId", I18N_WinSaddleBonus, I18N_Score);
+            foreach (var (Name, TrainedCharaId, WinSaddleBonus, Score, _) in win_saddle_result)
+                table.AddRow(Name.EscapeMarkup(), TrainedCharaId.ToString(), WinSaddleBonus.ToString(), Score.ToString());
             AnsiConsole.Write(table);
         }
-
-        void ParseFriendSearchResponse(FriendSearchResponse @event)
-        {
-            var data = @event.data;
-            var chara = data.practice_partner_info;
-            // 每个相同的重赏胜场加3胜鞍加成
-            var charaWinSaddle = chara.win_saddle_id_array.Intersect(Database.SaddleIds);
-            var parentWinSaddle_a = chara.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
-            var parentWinSaddle_b = chara.succession_chara_array[1].win_saddle_id_array.Intersect(Database.SaddleIds);
-            var win_saddle = charaWinSaddle.Intersect(parentWinSaddle_a).Count() * 3
-                + charaWinSaddle.Intersect(parentWinSaddle_b).Count() * 3;
-            // 应用因子强化
-            if (chara.factor_extend_array != null)
-            {
-                foreach (var i in chara.factor_extend_array)
-                {
-                    if (i.position_id == 1)
-                    {
-                        var extendedFactor = chara.factor_info_array.FirstOrDefault(x => x.factor_id == i.base_factor_id);
-                        if (extendedFactor == default) continue;
-                        extendedFactor.factor_id = i.factor_id;
-                    }
-                    else
-                    {
-                        var successionChara = chara.succession_chara_array.FirstOrDefault(x => x.position_id == i.position_id);
-                        if (successionChara == default) continue;
-                        var extendedFactor = successionChara.factor_info_array.FirstOrDefault(x => x.factor_id == i.base_factor_id);
-                        if (extendedFactor == default) continue;
-                        extendedFactor.factor_id = i.factor_id;
-                    }
-                }
-            }
-
-            AnsiConsole.Write(new Rule());
-            AnsiConsole.WriteLine(I18N_Friend, data.user_info_summary.name, data.user_info_summary.viewer_id, data.follower_num);
-            AnsiConsole.WriteLine(I18N_Uma, Database.Names.GetUmamusume(chara.card_id).FullName, win_saddle, chara.rank_score);
-            AnsiConsole.WriteLine(i18n.ParseFriendSearchResponse.I18N_WinSaddle, string.Join(',', charaWinSaddle));
-            if (Database.SaddleNames.Count != 0)
-                AnsiConsole.WriteLine(I18N_WinSaddleDetail, string.Join(',', charaWinSaddle.Select(x => Database.SaddleNames[x])));
-            var tree = new Tree(I18N_Factor);
-
-            var max = chara.factor_info_array.Select(x => x.factor_id).Concat(chara.succession_chara_array[0].factor_info_array.Select(x => x.factor_id))
-                .Concat(chara.succession_chara_array[1].factor_info_array.Select(x => x.factor_id))
-                .Where((x, index) => index % 2 == 0)
-                .Max(x => GetRenderWidth(Database.FactorIds[x]));
-            var representative = AddFactors(I18N_UmaFactor, chara.factor_info_array.Select(x => x.factor_id).ToArray(), max);
-            var inheritanceA = AddFactors(string.Format(I18N_ParentFactor, chara.succession_chara_array[0].owner_viewer_id), chara.succession_chara_array[0].factor_info_array.Select(x => x.factor_id).ToArray(), max);
-            var inheritanceB = AddFactors(string.Format(I18N_ParentFactor, chara.succession_chara_array[1].owner_viewer_id), chara.succession_chara_array[1].factor_info_array.Select(x => x.factor_id).ToArray(), max);
-
-            tree.AddNodes(representative, inheritanceA, inheritanceB);
-            AnsiConsole.Write(tree);
-            AnsiConsole.Write(new Rule());
-        }
-        void ParseFriendSearchResponseSimple(FriendSearchResponse @event)
-        {
-            var data = @event.data;
-            AnsiConsole.Write(new Rule());
-            AnsiConsole.WriteLine(I18N_FriendSimple, data.user_info_summary.name, data.user_info_summary.viewer_id);
-            AnsiConsole.WriteLine(I18N_UmaSimple, Database.Names.GetUmamusume(data.user_info_summary.user_trained_chara.card_id).FullName);
-            var tree = new Tree(I18N_Factor);
-
-            var i = data.user_info_summary.user_trained_chara;
-            var max = i.factor_info_array.Select(x => x.factor_id)
-                .Where((x, index) => index % 2 == 0)
-                .Max(x => GetRenderWidth(Database.FactorIds[x]));
-            var representative = AddFactors(I18N_UmaFactor, i.factor_info_array.Select(x => x.factor_id).ToArray(), max);
-
-            tree.AddNodes(representative);
-            AnsiConsole.Write(tree);
-            AnsiConsole.Write(new Rule());
-        }
-        Tree AddFactors(string title, int[] id_array, int max)
-        {
-            var tree = new Tree(title);
-            var ordered = id_array.Take(2).Append(id_array[^1]).Concat(id_array.Skip(2).SkipLast(1));
-            var even = ordered.Where((x, index) => index % 2 == 0).ToArray();
-            var odd = ordered.Where((x, index) => index % 2 != 0).ToArray();
-            foreach (var index in Enumerable.Range(0, even.Length))
-            {
-                var sb = new StringBuilder();
-                sb.Append(FactorName(even[index]));
-                var gap = 12 + max - GetRenderWidth(Database.FactorIds[even[index]]);
-                if (gap < 0) gap = 2; sb.Append(string.Join(string.Empty, Enumerable.Repeat(' ', gap)));
-                sb.Append(odd.Length > index ? FactorName(odd[index]) : "");
-                tree.AddNode(sb.ToString());
-            }
-            return tree;
-        }
-        string FactorName(int factorId)
-        {
-            var name = Database.FactorIds[factorId];
-            return factorId.ToString().Length switch
-            {
-                3 => $"[#FFFFFF on #37B8F4]{name}[/]", // 蓝
-                4 => $"[#FFFFFF on #FF78B2]{name}[/]", // 红
-                8 => $"[#794016 on #91D02E]{name}[/]", // 固有
-                _ => $"[#794016 on #E1E2E1]{name}[/]", // 白
-            };
-        }
-        int GetRenderWidth(string text)
-        {
-            return text.Sum(x => x.GetCellWidth());
-        }
-
         public async Task UpdatePlugin(ProgressContext ctx)
         {
-            var progress = ctx.AddTask($"[{Name}] 更新");
+            var progress = ctx.AddTask($"[[{Name}]] 更新");
 
             using var client = new HttpClient();
+
+            var assetsHost = string.IsNullOrEmpty(Config.Updater.CustomDatabaseRepository) ? "https://github.com/UmamusumeResponseAnalyzer/Assets/raw/refs/heads/main/".AllowMirror() : Config.Updater.CustomDatabaseRepository;
+            var brUrl = $"{assetsHost}/GameData/ja-JP/factor_effects.br";
+            var br = await client.GetByteArrayAsync(brUrl);
+            File.WriteAllBytes(FACTOR_EFFECT_FILEPATH, br);
+
             using var resp = await client.GetAsync($"https://api.github.com/repos/URA-Plugins/{Name}/releases/latest");
             var json = await resp.Content.ReadAsStringAsync();
             var jo = JObject.Parse(json);
@@ -209,11 +185,7 @@ namespace WinSaddleAnalyzer
             }
             progress.Increment(25);
 
-            var downloadUrl = jo["assets"][0]["browser_download_url"].ToString();
-            if (Config.Updater.IsGithubBlocked && !Config.Updater.ForceUseGithubToUpdate)
-            {
-                downloadUrl = downloadUrl.Replace("https://", "https://gh.shuise.dev/");
-            }
+            var downloadUrl = jo["assets"][0]["browser_download_url"].ToString().AllowMirror();
             using var msg = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
             using var stream = await msg.Content.ReadAsStreamAsync();
             var buffer = new byte[8192];
@@ -230,5 +202,8 @@ namespace WinSaddleAnalyzer
 
             progress.StopTask();
         }
+
+        [System.Text.RegularExpressions.GeneratedRegex("「(.*?)」のスキルヒント")]
+        private static partial System.Text.RegularExpressions.Regex FactorEffectRegex();
     }
 }
