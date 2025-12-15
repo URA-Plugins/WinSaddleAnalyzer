@@ -1,5 +1,6 @@
 ﻿using Gallop;
 using Spectre.Console;
+using System;
 using System.Text;
 using UmamusumeResponseAnalyzer;
 using static WinSaddleAnalyzer.i18n.ParseFriendSearchResponse;
@@ -19,27 +20,7 @@ namespace WinSaddleAnalyzer
             var friendAndDadWinSaddle = charaWinSaddle.Intersect(parentWinSaddle_a).Count() * 3;
             var friendAndMomWinSaddle = charaWinSaddle.Intersect(parentWinSaddle_b).Count() * 3;
 
-            // 应用因子强化
-            if (chara.factor_extend_array != null)
-            {
-                foreach (var i in chara.factor_extend_array)
-                {
-                    if (i.position_id == 1)
-                    {
-                        var extendedFactor = chara.factor_info_array.FirstOrDefault(x => x.factor_id == i.base_factor_id);
-                        if (extendedFactor == default) continue;
-                        extendedFactor.factor_id = i.factor_id;
-                    }
-                    else
-                    {
-                        var successionChara = chara.succession_chara_array.FirstOrDefault(x => x.position_id == i.position_id);
-                        if (successionChara == default) continue;
-                        var extendedFactor = successionChara.factor_info_array.FirstOrDefault(x => x.factor_id == i.base_factor_id);
-                        if (extendedFactor == default) continue;
-                        extendedFactor.factor_id = i.factor_id;
-                    }
-                }
-            }
+            ApplyFactorExtend(chara);
 
             AnsiConsole.Write(new Rule());
             AnsiConsole.WriteLine(I18N_Friend, data.user_info_summary.name, data.user_info_summary.viewer_id, data.follower_num);
@@ -79,6 +60,29 @@ namespace WinSaddleAnalyzer
             tree.AddNodes(representative);
             AnsiConsole.Write(tree);
             AnsiConsole.Write(new Rule());
+        }
+        public void ApplyFactorExtend(TrainedChara chara)
+        {
+            if (chara.factor_extend_array != null)
+            {
+                foreach (var i in chara.factor_extend_array)
+                {
+                    if (i.position_id == 1)
+                    {
+                        var extendedFactor = chara.factor_info_array.FirstOrDefault(x => x.factor_id == i.base_factor_id);
+                        if (extendedFactor == default) continue;
+                        extendedFactor.factor_id = i.factor_id;
+                    }
+                    else
+                    {
+                        var successionChara = chara.succession_chara_array.FirstOrDefault(x => x.position_id == i.position_id);
+                        if (successionChara == default) continue;
+                        var extendedFactor = successionChara.factor_info_array.FirstOrDefault(x => x.factor_id == i.base_factor_id);
+                        if (extendedFactor == default) continue;
+                        extendedFactor.factor_id = i.factor_id;
+                    }
+                }
+            }
         }
         public static Tree AddFactors(string title, int[] id_array, int max)
         {

@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Spectre.Console;
+using System;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
@@ -62,6 +63,7 @@ namespace WinSaddleAnalyzer
                 }
             }
             Parent = TrainedChara.FirstOrDefault(x => x.trained_chara_id == ParentHorseId)!;
+            ApplyFactorExtend(Parent);
 
             var sep = PluginManager.LoadedPlugins.FirstOrDefault(x => x.Name == "SkillEffectPlugin");
             if (sep != default)
@@ -95,6 +97,8 @@ namespace WinSaddleAnalyzer
                 rentalHorse ??= TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdDad) ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdMom);
                 var mineHorse = TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdDad) ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdMom);
                 ParentHorseId = mineHorse.trained_chara_id;
+                ApplyFactorExtend(rentalHorse);
+                ApplyFactorExtend(mineHorse);
                 CalculateRelation(rentalHorse, mineHorse);
             }
             if (data.ContainsKey("trained_chara_array") && data.ContainsKey("trained_chara_favorite_array") && data.ContainsKey("room_match_entry_chara_id_array"))
