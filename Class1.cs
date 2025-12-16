@@ -69,8 +69,8 @@ namespace WinSaddleAnalyzer
             if (sep != default)
             {
                 var plugin = (dynamic)sep;
-                var effects = (Dictionary<UmamusumeResponseAnalyzer.Entities.SkillData, double>)plugin.Effects;
-                SkillEffects = effects.ToDictionary(x => x.Key.Name, x => x.Value);
+                var effects = (Dictionary<string, double>)plugin.Effects;
+                SkillEffects = effects.ToDictionary(x => x.Key, x => x.Value);
             }
         }
 
