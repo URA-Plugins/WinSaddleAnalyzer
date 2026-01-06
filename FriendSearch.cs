@@ -205,7 +205,7 @@ namespace WinSaddleAnalyzer
             var friendSkillFactorProbe = CalculateSkillEffect(friend, friendTotalRelation, friendDadTotalRelation, friendMomTotalRelation);
             AnsiConsole.WriteLine($"好友技能期望收益：{friendSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
 
-            var mineSkillFactorProbe = CalculateSkillEffect(Parent, mineTotalRelation, mineDadTotalRelation, mineMomTotalRelation);
+            var mineSkillFactorProbe = CalculateSkillEffect(mine, mineTotalRelation, mineDadTotalRelation, mineMomTotalRelation);
             AnsiConsole.WriteLine($"自己技能期望收益：{mineSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
 
             return (friendTotalRelation, friendSingleRelation, friendDadTotalRelation, friendMomTotalRelation, mineTotalRelation, mineSingleRelation, mineDadTotalRelation, mineMomTotalRelation);

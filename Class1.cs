@@ -39,7 +39,7 @@ namespace WinSaddleAnalyzer
         /// <summary>
         /// 指定的前提种马
         /// </summary>
-        internal static TrainedChara Parent { get; set; } = default!;
+        internal static TrainedChara? Parent { get; set; } = default!;
 
         public void Initialize()
         {
@@ -54,7 +54,7 @@ namespace WinSaddleAnalyzer
             foreach (var effect in factorEffects)
             {
                 var id = effect["index"].ToInt();
-                var text = effect["text"].ToString();
+                var text = effect["text"]?.ToString() ?? string.Empty;
                 var skill = FactorEffectRegex().Match(text).Groups[1].Value;
                 if (!string.IsNullOrEmpty(skill))
                 {
@@ -62,8 +62,9 @@ namespace WinSaddleAnalyzer
                     FactorEffects.Add(id, skill);
                 }
             }
-            Parent = TrainedChara.FirstOrDefault(x => x.trained_chara_id == ParentHorseId)!;
-            ApplyFactorExtend(Parent);
+            Parent = TrainedChara.FirstOrDefault(x => x.trained_chara_id == ParentHorseId);
+            if (Parent != default)
+                ApplyFactorExtend(Parent);
 
             var sep = PluginManager.LoadedPlugins.FirstOrDefault(x => x.Name == "SkillEffectPlugin");
             if (sep != default)
@@ -78,28 +79,35 @@ namespace WinSaddleAnalyzer
         public void Analyze(JObject jo)
         {
             if (!jo.ContainsKey("data")) return;
-            var data = jo["data"] as JObject;
+            if (jo["data"] is not JObject data) return;
             if (data.ContainsKey("common_define") && data.ContainsKey("trained_chara"))
             {
-                var obj = data["trained_chara"].ToObject<TrainedChara[]>();
+                var obj = data["trained_chara"]?.ToObject<TrainedChara[]>() ?? [];
                 TrainedChara = obj;
                 File.WriteAllText(TRAINED_CHARA_FILEPATH, JsonConvert.SerializeObject(obj));
             }
             if (data.ContainsKey("single_mode_start_common") && data["single_mode_start_common"].ContainsKey("add_trained_chara_array"))
             {
-                var singleModeStartCommon = data["single_mode_start_common"];
-                var charaInfo = singleModeStartCommon["chara_info"];
-                TargetHorseId = int.Parse(charaInfo["card_id"].ToString()[..4]);
-                var successionTrainedCharaIdDad = charaInfo["succession_trained_chara_id_1"].ToObject<int>();
-                var successionTrainedCharaIdMom = charaInfo["succession_trained_chara_id_2"].ToObject<int>();
-                var addTrainedCharaArray = singleModeStartCommon["add_trained_chara_array"];
-                var rentalHorse = (addTrainedCharaArray.FirstOrDefault(x => x["trained_chara_id"].ToObject<int>() == successionTrainedCharaIdDad) ?? addTrainedCharaArray.FirstOrDefault(x => x["trained_chara_id"].ToObject<int>() == successionTrainedCharaIdMom))?.ToObject<TrainedChara>();
+                if (data["single_mode_start_common"] is not JObject singleModeStartCommon) return;
+                var charaInfo = singleModeStartCommon["chara_info"]!;
+                TargetHorseId = int.Parse(charaInfo["card_id"]!.ToString()[..4]);
+                var successionTrainedCharaIdDad = charaInfo["succession_trained_chara_id_1"]!.ToObject<int>();
+                var successionTrainedCharaIdMom = charaInfo["succession_trained_chara_id_2"]!.ToObject<int>();
+                var addTrainedCharaArray = singleModeStartCommon["add_trained_chara_array"]!;
+                var rentalHorse = (addTrainedCharaArray.FirstOrDefault(x => (x["trained_chara_id"]?.ToObject<int>() ?? 0) == successionTrainedCharaIdDad) ?? addTrainedCharaArray.FirstOrDefault(x => (x["trained_chara_id"]?.ToObject<int>() ?? 0) == successionTrainedCharaIdMom))?.ToObject<TrainedChara>();
                 rentalHorse ??= TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdDad) ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdMom);
                 var mineHorse = TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdDad) ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdMom);
-                ParentHorseId = mineHorse.trained_chara_id;
-                ApplyFactorExtend(rentalHorse);
-                ApplyFactorExtend(mineHorse);
-                CalculateRelation(rentalHorse, mineHorse);
+                if (rentalHorse != null && mineHorse != null)
+                {
+                    ParentHorseId = mineHorse.trained_chara_id;
+                    ApplyFactorExtend(rentalHorse);
+                    ApplyFactorExtend(mineHorse);
+                    CalculateRelation(rentalHorse, mineHorse);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]未找到种马信息，请先查看一次殿堂马再尝试看相性。[/]");
+                }
             }
             if (data.ContainsKey("trained_chara_array") && data.ContainsKey("trained_chara_favorite_array") && data.ContainsKey("room_match_entry_chara_id_array"))
             {
