@@ -17,7 +17,6 @@ namespace WinSaddleAnalyzer
         [PluginDescription("显示殿堂马&好友种马信息")]
         public string Name => "WinSaddleAnalyzer";
         public string Author => "离披";
-        public Version Version => Assembly.GetExecutingAssembly().GetName().Version ?? new();
         public string[] Targets => [];
 
         [PluginSetting, PluginDescription("显示顺序: 0为从老到新，1是从高胜鞍到低胜鞍，2是从高分到低分")]
@@ -188,7 +187,7 @@ namespace WinSaddleAnalyzer
             var json = await resp.Content.ReadAsStringAsync();
             var jo = JObject.Parse(json);
 
-            var isLatest = ("v" + Version.ToString()).Equals("v" + jo["tag_name"]?.ToString());
+            var isLatest = ("v" + ((IPlugin)this).Version.ToString()).Equals("v" + jo["tag_name"]?.ToString());
             if (isLatest)
             {
                 progress.Increment(progress.MaxValue);
