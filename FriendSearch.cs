@@ -12,7 +12,7 @@ namespace WinSaddleAnalyzer
         public void ParseFriendSearchResponse(Gallop.FriendSearchResponse @event)
         {
             var data = @event.data;
-            var chara = data.practice_partner_info;
+            var chara = data.practice_partner_info ?? data.partner_chara_info_array[0];
             // 每个相同的重赏胜场加3胜鞍加成
             var charaWinSaddle = chara.win_saddle_id_array.Intersect(Database.SaddleIds);
             var parentWinSaddle_a = chara.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
