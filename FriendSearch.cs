@@ -46,16 +46,16 @@ namespace WinSaddleAnalyzer
         public static void ParseFriendSearchResponseSimple(Gallop.FriendSearchResponse @event)
         {
             var data = @event.data;
+            var chara = data.user_info_summary.user_trained_chara ?? data.user_info_summary.user_trained_chara_array[0];
             AnsiConsole.Write(new Rule());
             AnsiConsole.WriteLine(I18N_FriendSimple, data.user_info_summary.name, data.user_info_summary.viewer_id);
-            AnsiConsole.WriteLine(I18N_UmaSimple, Database.Names.GetUmamusume(data.user_info_summary.user_trained_chara.card_id).FullName);
+            AnsiConsole.WriteLine(I18N_UmaSimple, Database.Names.GetUmamusume(chara.card_id).FullName);
             var tree = new Tree(I18N_Factor);
 
-            var i = data.user_info_summary.user_trained_chara;
-            var max = i.factor_info_array.Select(x => x.factor_id)
+            var max = chara.factor_info_array.Select(x => x.factor_id)
                 .Where((x, index) => index % 2 == 0)
                 .Max(x => GetRenderWidth(Database.FactorIds[x]));
-            var representative = AddFactors(I18N_UmaFactor, i.factor_info_array.Select(x => x.factor_id).ToArray(), max);
+            var representative = AddFactors(I18N_UmaFactor, chara.factor_info_array.Select(x => x.factor_id).ToArray(), max);
 
             tree.AddNodes(representative);
             AnsiConsole.Write(tree);

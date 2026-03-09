@@ -125,7 +125,7 @@ namespace WinSaddleAnalyzer
                 if ((data.ContainsKey("practice_partner_info") || data.ContainsKey("partner_chara_info_array")) && (data.ContainsKey("support_card_data") || data.ContainsKey("support_card_data_array")) && data.ContainsKey("follower_num") && data.ContainsKey("own_follow_num"))
                     ParseFriendSearchResponse(jo.ToObject<FriendSearchResponse>());
 #warning 这里忘记在哪触发了，没修
-                else if (data.ContainsKey("user_info_summary") && data["user_info_summary"].ContainsKey("user_trained_chara"))
+                else if (data.ContainsKey("user_info_summary") && (data["user_info_summary"].ContainsKey("user_trained_chara") || data["user_info_summary"].ContainsKey("user_trained_chara_array")))
                     ParseFriendSearchResponseSimple(jo.ToObject<FriendSearchResponse>());
             }
         }
