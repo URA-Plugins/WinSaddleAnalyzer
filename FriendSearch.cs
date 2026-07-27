@@ -1,7 +1,4 @@
 ﻿using Gallop;
-using Spectre.Console;
-using System;
-using System.Text;
 using UmamusumeResponseAnalyzer;
 using static WinSaddleAnalyzer.i18n.ParseFriendSearchResponse;
 
@@ -12,7 +9,7 @@ namespace WinSaddleAnalyzer
         public void ParseFriendSearchResponse(Gallop.FriendSearchResponse @event)
         {
             var data = @event.data;
-            var chara = data.practice_partner_info ?? data.partner_chara_info_array[0];
+            var chara = data.partner_chara_info_array[0];
             // 每个相同的重赏胜场加3胜鞍加成
             var charaWinSaddle = chara.win_saddle_id_array.Intersect(Database.SaddleIds);
             var parentWinSaddle_a = chara.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
@@ -22,44 +19,36 @@ namespace WinSaddleAnalyzer
 
             ApplyFactorExtend(chara);
 
-            AnsiConsole.Write(new Rule());
-            AnsiConsole.WriteLine(I18N_Friend, data.user_info_summary.name, data.user_info_summary.viewer_id, data.follower_num);
-            AnsiConsole.WriteLine(I18N_Uma, Database.Names.GetUmamusume(chara.card_id).FullName, friendAndDadWinSaddle + friendAndMomWinSaddle, chara.rank_score);
-            AnsiConsole.WriteLine(I18N_WinSaddle, string.Join(',', charaWinSaddle));
-            var tree = new Tree(I18N_Factor);
+            var rows = new List<string>
+            {
+                string.Format(I18N_Friend, data.user_info_summary.name, data.user_info_summary.viewer_id, data.follower_num),
+                string.Format(I18N_Uma, Database.Names.GetUmamusume(chara.card_id).FullName, friendAndDadWinSaddle + friendAndMomWinSaddle, chara.rank_score),
+                string.Format(I18N_WinSaddle, string.Join(',', charaWinSaddle)),
+                I18N_Factor,
+            };
 
-            var max = chara.factor_info_array.Select(x => x.factor_id).Concat(chara.succession_chara_array[0].factor_info_array.Select(x => x.factor_id))
-                .Concat(chara.succession_chara_array[1].factor_info_array.Select(x => x.factor_id))
-                .Where((x, index) => index % 2 == 0)
-                .Max(x => GetRenderWidth(Database.FactorIds[x]));
-            var representative = AddFactors(I18N_UmaFactor, [.. chara.factor_info_array.Select(x => x.factor_id)], max);
-            var inheritanceA = AddFactors(string.Format(I18N_ParentFactor, chara.succession_chara_array[0].owner_viewer_id), chara.succession_chara_array[0].factor_info_array.Select(x => x.factor_id).ToArray(), max);
-            var inheritanceB = AddFactors(string.Format(I18N_ParentFactor, chara.succession_chara_array[1].owner_viewer_id), chara.succession_chara_array[1].factor_info_array.Select(x => x.factor_id).ToArray(), max);
-
-            tree.AddNodes(representative, inheritanceA, inheritanceB);
-            AnsiConsole.Write(tree);
-
-            CalculateRelation(chara);
-
-            AnsiConsole.Write(new Rule());
+            rows.AddRange(FormatFactors(I18N_UmaFactor, [.. chara.factor_info_array.Select(x => x.factor_id)]));
+            rows.AddRange(FormatFactors(
+                string.Format(I18N_ParentFactor, chara.succession_chara_array[0].owner_viewer_id),
+                [.. chara.succession_chara_array[0].factor_info_array.Select(x => x.factor_id)]));
+            rows.AddRange(FormatFactors(
+                string.Format(I18N_ParentFactor, chara.succession_chara_array[1].owner_viewer_id),
+                [.. chara.succession_chara_array[1].factor_info_array.Select(x => x.factor_id)]));
+            ShowPanel("friend", "好友", new(string.Join(Environment.NewLine, rows)));
+            ShowPanel("inheritance", "相性分析", BuildRelationDisplay(chara));
         }
-        public static void ParseFriendSearchResponseSimple(Gallop.FriendSearchResponse @event)
+        public void ParseFriendSearchResponseSimple(UserInfoAtFriend userInfo)
         {
-            var data = @event.data;
-            var chara = data.user_info_summary.user_trained_chara ?? data.user_info_summary.user_trained_chara_array[0];
-            AnsiConsole.Write(new Rule());
-            AnsiConsole.WriteLine(I18N_FriendSimple, data.user_info_summary.name, data.user_info_summary.viewer_id);
-            AnsiConsole.WriteLine(I18N_UmaSimple, Database.Names.GetUmamusume(chara.card_id).FullName);
-            var tree = new Tree(I18N_Factor);
+            var chara = userInfo.user_trained_chara_array[0];
+            var rows = new List<string>
+            {
+                string.Format(I18N_FriendSimple, userInfo.name, userInfo.viewer_id),
+                string.Format(I18N_UmaSimple, Database.Names.GetUmamusume(chara.card_id).FullName),
+                I18N_Factor,
+            };
 
-            var max = chara.factor_info_array.Select(x => x.factor_id)
-                .Where((x, index) => index % 2 == 0)
-                .Max(x => GetRenderWidth(Database.FactorIds[x]));
-            var representative = AddFactors(I18N_UmaFactor, chara.factor_info_array.Select(x => x.factor_id).ToArray(), max);
-
-            tree.AddNodes(representative);
-            AnsiConsole.Write(tree);
-            AnsiConsole.Write(new Rule());
+            rows.AddRange(FormatFactors(I18N_UmaFactor, [.. chara.factor_info_array.Select(x => x.factor_id)]));
+            ShowPanel("friend", "好友", new(string.Join(Environment.NewLine, rows)));
         }
         public void ApplyFactorExtend(TrainedChara chara)
         {
@@ -84,47 +73,47 @@ namespace WinSaddleAnalyzer
                 }
             }
         }
-        public static Tree AddFactors(string title, int[] id_array, int max)
+        static IEnumerable<string> FormatFactors(string title, int[] factorIds)
         {
-            var tree = new Tree(title);
-            var ordered = id_array.Take(2).Append(id_array[^1]).Concat(id_array.Skip(2).SkipLast(1));
+            yield return title;
+            if (factorIds.Length == 0)
+                yield break;
+
+            var ordered = factorIds.Take(2).Append(factorIds[^1]).Concat(factorIds.Skip(2).SkipLast(1));
             var even = ordered.Where((x, index) => index % 2 == 0).ToArray();
             var odd = ordered.Where((x, index) => index % 2 != 0).ToArray();
             foreach (var index in Enumerable.Range(0, even.Length))
             {
-                var sb = new StringBuilder();
-                sb.Append(FactorName(even[index]));
-                var gap = 12 + max - GetRenderWidth(Database.FactorIds[even[index]]);
-                if (gap < 0) { gap = 2; }
-                sb.Append(string.Join(string.Empty, Enumerable.Repeat(' ', gap)));
-                sb.Append(odd.Length > index ? FactorName(odd[index]) : "");
-                tree.AddNode(sb.ToString());
+                var second = odd.Length > index ? $"    {Database.FactorIds[odd[index]]}" : string.Empty;
+                yield return $"  {Database.FactorIds[even[index]]}{second}";
             }
-            return tree;
         }
-        public static string FactorName(int factorId)
-        {
-            var name = Database.FactorIds[factorId];
-            return factorId.ToString().Length switch
-            {
-                3 => $"[#FFFFFF on #37B8F4]{name} [/]", // 蓝
-                4 => $"[#FFFFFF on #FF78B2]{name} [/]", // 红
-                8 => $"[#794016 on #91D02E]{name} [/]", // 固有
-                _ => $"[#794016 on #E1E2E1]{name} [/]", // 白
-            };
-        }
-        public static int GetRenderWidth(string text)
-        {
-            return text.Sum(x => x.GetCellWidth());
-        }
-        public (int, int, int, int, int, int, int, int) CalculateRelation(TrainedChara friend, TrainedChara mine = null!)
+        DisplayResult BuildRelationDisplay(TrainedChara friend, TrainedChara? mine = null)
         {
             mine ??= Parent;
             if (mine is null)
             {
-                AnsiConsole.MarkupLine($"[red]未找到种马信息，请先查看一次殿堂马再尝试看相性。[/]");
-                return (0, 0, 0, 0, 0, 0, 0, 0);
+                const string warning = "未找到种马信息，请先查看一次殿堂马再尝试看相性。";
+                return new(warning, warning);
             }
+
+            var rows = new List<string>();
+            CalculateRelation(friend, mine, rows);
+            return new(string.Join(Environment.NewLine, rows));
+        }
+
+        public (int, int, int, int, int, int, int, int) CalculateRelation(TrainedChara friend, TrainedChara? mine = null)
+            => CalculateRelation(friend, mine, null);
+
+        (int, int, int, int, int, int, int, int) CalculateRelation(
+            TrainedChara friend,
+            TrainedChara? mine,
+            List<string>? rows)
+        {
+            mine ??= Parent;
+            if (mine is null)
+                return (0, 0, 0, 0, 0, 0, 0, 0);
+            var mineChara = mine;
             var charaWinSaddle = friend.win_saddle_id_array.Intersect(Database.SaddleIds);
             var parentWinSaddle_a = friend.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
             var parentWinSaddle_b = friend.succession_chara_array[1].win_saddle_id_array.Intersect(Database.SaddleIds);
@@ -142,26 +131,26 @@ namespace WinSaddleAnalyzer
             var mineMomTotalRelation = 0;
 
             // https://www.bilibili.com/video/BV1tX96YMEZ9?t=205.9
-            if (TargetHorseId != 0 && mine != null)
+            if (TargetHorseId != 0)
             {
-                var friendWinSaddleWithParent = mine.win_saddle_id_array.Intersect(Database.SaddleIds).Intersect(charaWinSaddle).Count() * 3;
+                var friendWinSaddleWithParent = mineChara.win_saddle_id_array.Intersect(Database.SaddleIds).Intersect(charaWinSaddle).Count() * 3;
 
                 var targetRelations = Database.SuccessionRelation.MemberDictionary.Where(x => x.Value.Contains(TargetHorseId)).ToDictionary();
                 var relationWithFriendChara = SumWinSaddles(friend, targetRelations);
                 friendDadTotalRelation = friendAndDadWinSaddle + relationWithFriendChara.Item2;
                 friendMomTotalRelation = friendAndMomWinSaddle + relationWithFriendChara.Item3;
 
-                var mineHorseWinSaddle = mine.win_saddle_id_array.Intersect(Database.SaddleIds);
-                var mineWinSaddle_a = mine.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
-                var mineWinSaddle_b = mine.succession_chara_array[1].win_saddle_id_array.Intersect(Database.SaddleIds);
+                var mineHorseWinSaddle = mineChara.win_saddle_id_array.Intersect(Database.SaddleIds);
+                var mineWinSaddle_a = mineChara.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
+                var mineWinSaddle_b = mineChara.succession_chara_array[1].win_saddle_id_array.Intersect(Database.SaddleIds);
                 var mineAndDadWinSaddle = mineHorseWinSaddle.Intersect(mineWinSaddle_a).Count() * 3;
                 var mineAndMomWinSaddle = mineHorseWinSaddle.Intersect(mineWinSaddle_b).Count() * 3;
 
-                var relationWithMineHorse = SumWinSaddles(mine, targetRelations);
+                var relationWithMineHorse = SumWinSaddles(mineChara, targetRelations);
                 mineDadTotalRelation = mineAndDadWinSaddle + relationWithMineHorse.Item2;
                 mineMomTotalRelation = mineAndMomWinSaddle + relationWithMineHorse.Item3;
 
-                var mineHorseCardId = int.Parse(mine.card_id.ToString()[..4]);
+                var mineHorseCardId = int.Parse(mineChara.card_id.ToString()[..4]);
                 var friendHorseCardId = int.Parse(friend.card_id.ToString()[..4]);
                 var mineHorseRelations = Database.SuccessionRelation.MemberDictionary.Where(x => x.Value.Contains(mineHorseCardId)).ToDictionary();
                 var friendHorseRelations = Database.SuccessionRelation.MemberDictionary.Where(x => x.Value.Contains(friendHorseCardId)).ToDictionary();
@@ -173,8 +162,8 @@ namespace WinSaddleAnalyzer
                 mineSingleRelation = relationWithMineHorse.Item1 + mineDadTotalRelation + mineMomTotalRelation;
                 mineTotalRelation = mineSingleRelation + friendWinSaddleWithParent + mineAndFriendRelationPoint;
             }
-            AnsiConsole.WriteLine($"好友总相性：{friendTotalRelation}\t好友单相性：{friendSingleRelation}\t好友祖1相性{friendDadTotalRelation}\t好友祖2相性{friendMomTotalRelation}");
-            AnsiConsole.WriteLine($"自己总相性：{mineTotalRelation}\t自己单相性：{mineSingleRelation}\t自己祖1相性{mineDadTotalRelation}\t自己祖2相性{mineMomTotalRelation}");
+            rows?.Add($"好友总相性：{friendTotalRelation}\t好友单相性：{friendSingleRelation}\t好友祖1相性{friendDadTotalRelation}\t好友祖2相性{friendMomTotalRelation}");
+            rows?.Add($"自己总相性：{mineTotalRelation}\t自己单相性：{mineSingleRelation}\t自己祖1相性{mineDadTotalRelation}\t自己祖2相性{mineMomTotalRelation}");
 
             var distanceFactorProbe = new Dictionary<string, decimal>();
 
@@ -185,13 +174,13 @@ namespace WinSaddleAnalyzer
             CalculateProper(distanceFactorProbe, friendDadDistanceFactors, friendDadTotalRelation);
             CalculateProper(distanceFactorProbe, friendMomDistanceFactors, friendMomTotalRelation);
 
-            var mineDistanceFactors = mine.factor_info_array.Where(x => (x.factor_id >= 1000 && x.factor_id < 10000) || (x.factor_id >= 5000000 && x.factor_id < 5001100));
-            var mineDadDistanceFactors = mine.succession_chara_array[0].factor_info_array.Where(x => (x.factor_id >= 1000 && x.factor_id < 10000) || (x.factor_id >= 5000000 && x.factor_id < 5001100));
-            var mineMomDistanceFactors = mine.succession_chara_array[1].factor_info_array.Where(x => (x.factor_id >= 1000 && x.factor_id < 10000) || (x.factor_id >= 5000000 && x.factor_id < 5001100));
+            var mineDistanceFactors = mineChara.factor_info_array.Where(x => (x.factor_id >= 1000 && x.factor_id < 10000) || (x.factor_id >= 5000000 && x.factor_id < 5001100));
+            var mineDadDistanceFactors = mineChara.succession_chara_array[0].factor_info_array.Where(x => (x.factor_id >= 1000 && x.factor_id < 10000) || (x.factor_id >= 5000000 && x.factor_id < 5001100));
+            var mineMomDistanceFactors = mineChara.succession_chara_array[1].factor_info_array.Where(x => (x.factor_id >= 1000 && x.factor_id < 10000) || (x.factor_id >= 5000000 && x.factor_id < 5001100));
             CalculateProper(distanceFactorProbe, mineDistanceFactors, mineTotalRelation);
             CalculateProper(distanceFactorProbe, mineDadDistanceFactors, mineDadTotalRelation);
             CalculateProper(distanceFactorProbe, mineMomDistanceFactors, mineMomTotalRelation);
-            AnsiConsole.WriteLine($"单次继承概率：{string.Join(',', distanceFactorProbe.Select(x => $"{Database.FactorIds[int.Parse($"{x.Key}1")].Replace("★", string.Empty)}: {1 - x.Value:0.00%}"))}");
+            rows?.Add($"单次继承概率：{string.Join(',', distanceFactorProbe.Select(x => $"{Database.FactorIds[int.Parse($"{x.Key}1")].Replace("★", string.Empty)}: {1 - x.Value:0.00%}"))}");
 
             CalculateProper(distanceFactorProbe, friendDistanceFactors, friendTotalRelation);
             CalculateProper(distanceFactorProbe, friendDadDistanceFactors, friendDadTotalRelation);
@@ -200,13 +189,17 @@ namespace WinSaddleAnalyzer
             CalculateProper(distanceFactorProbe, mineDistanceFactors, mineTotalRelation);
             CalculateProper(distanceFactorProbe, mineDadDistanceFactors, mineDadTotalRelation);
             CalculateProper(distanceFactorProbe, mineMomDistanceFactors, mineMomTotalRelation);
-            AnsiConsole.WriteLine($"两次继承概率：{string.Join(',', distanceFactorProbe.Select(x => $"{Database.FactorIds[int.Parse($"{x.Key}1")].Replace("★", string.Empty)}: {1 - x.Value:0.00%}"))}");
+            rows?.Add($"两次继承概率：{string.Join(',', distanceFactorProbe.Select(x => $"{Database.FactorIds[int.Parse($"{x.Key}1")].Replace("★", string.Empty)}: {1 - x.Value:0.00%}"))}");
+
+            EnsureFactorEffectsLoaded();
+            if (SkillEffects.Count == 0)
+                SkillEffects = SkillEffectFileStore.Load();
 
             var friendSkillFactorProbe = CalculateSkillEffect(friend, friendTotalRelation, friendDadTotalRelation, friendMomTotalRelation);
-            AnsiConsole.WriteLine($"好友技能期望收益：{friendSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
+            rows?.Add($"好友技能期望收益：{friendSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
 
-            var mineSkillFactorProbe = CalculateSkillEffect(mine, mineTotalRelation, mineDadTotalRelation, mineMomTotalRelation);
-            AnsiConsole.WriteLine($"自己技能期望收益：{mineSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
+            var mineSkillFactorProbe = CalculateSkillEffect(mineChara, mineTotalRelation, mineDadTotalRelation, mineMomTotalRelation);
+            rows?.Add($"自己技能期望收益：{mineSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
 
             return (friendTotalRelation, friendSingleRelation, friendDadTotalRelation, friendMomTotalRelation, mineTotalRelation, mineSingleRelation, mineDadTotalRelation, mineMomTotalRelation);
         }
