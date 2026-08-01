@@ -11,7 +11,7 @@ using Terminal.Gui.Text;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using UmamusumeResponseAnalyzer;
-using UmamusumeResponseAnalyzer.LiveDisplay;
+using UmamusumeResponseAnalyzer.TerminalGui;
 using UmamusumeResponseAnalyzer.Plugin;
 using static WinSaddleAnalyzer.i18n.ParseTrainedCharaLoadResponse;
 
@@ -30,8 +30,10 @@ namespace WinSaddleAnalyzer
 
         public int TargetHorseId { get; set; } = 0;
         public int ParentHorseId { get; set; } = 0;
-        ILiveDisplayOutput? liveDisplay;
-        LiveDisplayWorkspace? workspace;
+        Workspace? workspace;
+        bool friendPublished;
+        bool inheritancePublished;
+        bool trainedCharactersPublished;
         TrainedCharaLoadResponse.CommonResponse? CurrentTrainedCharaData { get; set; }
 
         static readonly JsonSerializerSettings SettingsJson = new()
@@ -53,9 +55,8 @@ namespace WinSaddleAnalyzer
         /// </summary>
         internal static TrainedChara? Parent { get; set; } = default!;
 
-        public void Initialize(IPluginContext context)
+        public void Initialize(IPluginContext _)
         {
-            liveDisplay = context.LiveDisplay;
             PLUGIN_DATA_DIRECTORY = DataDirectory;
             Directory.CreateDirectory(PLUGIN_DATA_DIRECTORY);
             DATABASE_DIRECTORY = Directory.GetCurrentDirectory();
@@ -73,13 +74,25 @@ namespace WinSaddleAnalyzer
 
         public void Dispose()
         {
-            var output = liveDisplay;
-            var target = workspace;
-            liveDisplay = null;
-            workspace = null;
+            if (workspace is not { } target)
+                return;
 
-            if (output is not null && target is not null)
-                output.RemoveWorkspace(target);
+            if (inheritancePublished)
+            {
+                target.RemovePanel("inheritance");
+                inheritancePublished = false;
+            }
+            if (friendPublished)
+            {
+                target.RemovePanel("friend");
+                friendPublished = false;
+            }
+            if (trainedCharactersPublished)
+            {
+                target.RemovePanel("trained-characters");
+                trainedCharactersPublished = false;
+            }
+            workspace = null;
         }
 
         public async Task ConfigPromptAsync(
@@ -325,9 +338,14 @@ namespace WinSaddleAnalyzer
 
         void ShowPanel(string key, string title, DisplayResult result)
         {
-            LiveDisplay.SetPanel(Workspace, key, title, LiveDisplayContent.Text(result.Content));
+            var target = workspace ??= Workspace.Create(Name);
+            target.SetPanel(key, title, WorkspaceContent.Text(result.Content));
+            if (key == "friend")
+                friendPublished = true;
+            if (key == "inheritance")
+                inheritancePublished = true;
             if (result.Warning is { } warning)
-                LiveDisplay.Notify(Workspace, warning, LiveDisplaySeverity.Warning);
+                target.Notify(warning, UiSeverity.Warning);
         }
 
         [ResponseAnalyzer<GameApi.SingleMode.Start>]
@@ -382,11 +400,12 @@ namespace WinSaddleAnalyzer
             if (CurrentTrainedCharaData is not { } data)
                 return;
 
-            LiveDisplay.SetPanel(
-                Workspace,
+            var target = workspace ??= Workspace.Create(Name);
+            target.SetPanel(
                 "trained-characters",
                 "殿堂马",
                 BuildTrainedCharaTable(data));
+            trainedCharactersPublished = true;
         }
 
         [ResponseAnalyzer<GameApi.Friend.Search>]
@@ -408,7 +427,7 @@ namespace WinSaddleAnalyzer
             return ValueTask.CompletedTask;
         }
 
-        LiveDisplayContent BuildTrainedCharaTable(TrainedCharaLoadResponse.CommonResponse data)
+        WorkspaceContent BuildTrainedCharaTable(TrainedCharaLoadResponse.CommonResponse data)
         {
             var favouriteIds = data.trained_chara_favorite_array
                 .Select(x => x.trained_chara_id)
@@ -559,12 +578,6 @@ namespace WinSaddleAnalyzer
                 return TrainedCharaSortOrder.不排序;
             return descending;
         }
-
-        ILiveDisplayOutput LiveDisplay => liveDisplay
-            ?? throw new InvalidOperationException("WinSaddleAnalyzer 尚未初始化 LiveDisplay。");
-
-        LiveDisplayWorkspace Workspace => workspace
-            ??= LiveDisplay.CreateWorkspace(Name);
 
         [System.Text.RegularExpressions.GeneratedRegex("「(.*?)」のスキルヒント")]
         private static partial System.Text.RegularExpressions.Regex FactorEffectRegex();
