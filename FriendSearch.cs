@@ -22,7 +22,13 @@ namespace WinSaddleAnalyzer
             var rows = new List<string>
             {
                 string.Format(I18N_Friend, data.user_info_summary.name, data.user_info_summary.viewer_id, data.follower_num),
-                string.Format(I18N_Uma, Database.Names.GetUmamusume(chara.card_id).FullName, friendAndDadWinSaddle + friendAndMomWinSaddle, chara.rank_score),
+                string.Format(
+                    I18N_Uma,
+                    Database.Names.TryGetUmamusume(chara.card_id, out var uma)
+                        ? uma.FullName
+                        : Database.Names.DisplayName(chara.card_id),
+                    friendAndDadWinSaddle + friendAndMomWinSaddle,
+                    chara.rank_score),
                 string.Format(I18N_WinSaddle, string.Join(',', charaWinSaddle)),
                 I18N_Factor,
             };
@@ -43,7 +49,11 @@ namespace WinSaddleAnalyzer
             var rows = new List<string>
             {
                 string.Format(I18N_FriendSimple, userInfo.name, userInfo.viewer_id),
-                string.Format(I18N_UmaSimple, Database.Names.GetUmamusume(chara.card_id).FullName),
+                string.Format(
+                    I18N_UmaSimple,
+                    Database.Names.TryGetUmamusume(chara.card_id, out var uma)
+                        ? uma.FullName
+                        : Database.Names.DisplayName(chara.card_id)),
                 I18N_Factor,
             };
 
@@ -203,7 +213,7 @@ namespace WinSaddleAnalyzer
 
             return (friendTotalRelation, friendSingleRelation, friendDadTotalRelation, friendMomTotalRelation, mineTotalRelation, mineSingleRelation, mineDadTotalRelation, mineMomTotalRelation);
         }
-        public (int, int, int) SumWinSaddles(TrainedChara chara, Dictionary<int, List<int>> targetRelations)
+        public (int, int, int) SumWinSaddles(TrainedChara chara, IReadOnlyDictionary<int, int[]> targetRelations)
         {
             var charaId = int.Parse(chara.card_id.ToString()[..4]);
             var dadCharaId = int.Parse(chara.succession_chara_array[0].card_id.ToString()[..4]);

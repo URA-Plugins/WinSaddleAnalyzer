@@ -19,11 +19,8 @@ namespace WinSaddleAnalyzer
 {
     public partial class WinSaddleAnalyzer : IPlugin
     {
-        public string Name => "WinSaddleAnalyzer";
-        public string Author => "离披";
-        public string[] Targets => [];
-        public string DataDirectory => Path.Combine("PluginData", Name);
-        public string SettingsFilePath => Path.Combine("PluginData", Name, "settings.json");
+        public string DataDirectory => Path.Combine("PluginData", nameof(WinSaddleAnalyzer));
+        public string SettingsFilePath => Path.Combine("PluginData", nameof(WinSaddleAnalyzer), "settings.json");
 
         public TrainedCharaSortOrder TrainedCharaSort { get; set; } = TrainedCharaSortOrder.不排序;
         public bool OnlyFavourites { get; set; } = true;
@@ -338,7 +335,7 @@ namespace WinSaddleAnalyzer
 
         void ShowPanel(string key, string title, DisplayResult result)
         {
-            var target = workspace ??= Workspace.Create(Name);
+            var target = workspace ??= Workspace.Create(nameof(WinSaddleAnalyzer));
             target.SetPanel(key, title, WorkspaceContent.Text(result.Content));
             if (key == "friend")
                 friendPublished = true;
@@ -400,7 +397,7 @@ namespace WinSaddleAnalyzer
             if (CurrentTrainedCharaData is not { } data)
                 return;
 
-            var target = workspace ??= Workspace.Create(Name);
+            var target = workspace ??= Workspace.Create(nameof(WinSaddleAnalyzer));
             target.SetPanel(
                 "trained-characters",
                 "殿堂马",
@@ -444,7 +441,9 @@ namespace WinSaddleAnalyzer
                 var win_saddle = charaWinSaddle.Intersect(parentWinSaddle_a).Count() * 3
                     + charaWinSaddle.Intersect(parentWinSaddle_b).Count() * 3;
                 rows.Add(new(
-                    Database.Names.GetUmamusume(i.card_id).FullName,
+                    Database.Names.TryGetUmamusume(i.card_id, out var uma)
+                        ? uma.FullName
+                        : Database.Names.DisplayName(i.card_id),
                     i.trained_chara_id,
                     win_saddle,
                     i.rank_score));

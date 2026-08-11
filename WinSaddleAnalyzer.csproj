@@ -8,6 +8,7 @@
     <Version>2026.03.04</Version>
 
     <!-- URA 插件元数据：供发布 manifest 使用 -->
+    <PluginInternalName>WinSaddleAnalyzer</PluginInternalName>
     <PluginDisplayName>显示殿堂马&amp;好友种马信息</PluginDisplayName>
     <PluginAuthor>离披</PluginAuthor>
     <PluginRepositoryUrl>https://github.com/URA-Plugins/WinSaddleAnalyzer</PluginRepositoryUrl>
