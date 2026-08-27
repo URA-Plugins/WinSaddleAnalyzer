@@ -40,8 +40,11 @@ namespace WinSaddleAnalyzer
             rows.AddRange(FormatFactors(
                 string.Format(I18N_ParentFactor, chara.succession_chara_array[1].owner_viewer_id),
                 [.. chara.succession_chara_array[1].factor_info_array.Select(x => x.factor_id)]));
-            ShowPanel("friend", "好友", new(string.Join(Environment.NewLine, rows)));
-            ShowPanel("inheritance", "相性分析", BuildRelationDisplay(chara));
+            var friendResult = new DisplayResult(string.Join(Environment.NewLine, rows));
+            var inheritanceResult = BuildRelationDisplay(chara);
+            ClearPublishedPanels();
+            ShowPanel("friend", "好友", friendResult);
+            ShowPanel("inheritance", "相性分析", inheritanceResult);
         }
         public void ParseFriendSearchResponseSimple(UserInfoAtFriend userInfo)
         {
@@ -58,7 +61,9 @@ namespace WinSaddleAnalyzer
             };
 
             rows.AddRange(FormatFactors(I18N_UmaFactor, [.. chara.factor_info_array.Select(x => x.factor_id)]));
-            ShowPanel("friend", "好友", new(string.Join(Environment.NewLine, rows)));
+            var result = new DisplayResult(string.Join(Environment.NewLine, rows));
+            ClearPublishedPanels();
+            ShowPanel("friend", "好友", result);
         }
         public void ApplyFactorExtend(TrainedChara chara)
         {

@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using System.IO.Compression;
 using System.Text;
 using Terminal.Gui.App;
+using Terminal.Gui.Drawing;
 using Terminal.Gui.Input;
 using Terminal.Gui.Text;
 using Terminal.Gui.ViewBase;
@@ -71,24 +72,7 @@ namespace WinSaddleAnalyzer
 
         public void Dispose()
         {
-            if (workspace is not { } target)
-                return;
-
-            if (inheritancePublished)
-            {
-                target.RemovePanel("inheritance");
-                inheritancePublished = false;
-            }
-            if (friendPublished)
-            {
-                target.RemovePanel("friend");
-                friendPublished = false;
-            }
-            if (trainedCharactersPublished)
-            {
-                target.RemovePanel("trained-characters");
-                trainedCharactersPublished = false;
-            }
+            ClearPublishedPanels();
             workspace = null;
         }
 
@@ -147,7 +131,7 @@ namespace WinSaddleAnalyzer
             {
                 Title = "WinSaddleAnalyzer 配置",
                 Width = 72,
-                Height = 24,
+                Height = 27,
             };
             var trainedCharaSort = new OptionSelector<TrainedCharaSortOrder>
             {
@@ -162,21 +146,25 @@ namespace WinSaddleAnalyzer
                 Text = "只显示收藏了的马",
                 Value = draft.OnlyFavourites ? CheckState.Checked : CheckState.UnChecked,
             };
-            var targetHorseId = new NumericUpDown<int>
+            static NumericIdField IdField(int y, int value) => new()
             {
                 X = 28,
-                Y = 15,
+                Y = y,
                 Width = 20,
-                Value = draft.TargetHorseId,
-                Increment = 1,
+                Provider = new TextRegexProvider("^[0-9]*$")
+                {
+                    ValidateOnInput = true,
+                    Text = value.ToString(),
+                },
             };
-            var parentHorseId = new NumericUpDown<int>
+            var targetHorseId = IdField(15, draft.TargetHorseId);
+            var parentHorseId = IdField(17, draft.ParentHorseId);
+            var validation = new Label
             {
-                X = 28,
-                Y = 17,
-                Width = 20,
-                Value = draft.ParentHorseId,
-                Increment = 1,
+                X = 1,
+                Y = 19,
+                Width = Dim.Fill(1),
+                Height = 2,
             };
             dialog.Add(
                 new Label { X = 1, Y = 1, Text = "显示顺序" },
@@ -185,12 +173,37 @@ namespace WinSaddleAnalyzer
                 new Label { X = 1, Y = 15, Text = "要养的马的 CharaId" },
                 targetHorseId,
                 new Label { X = 1, Y = 17, Text = "另一个种马的 TrainedCharaId" },
-                parentHorseId);
+                parentHorseId,
+                validation);
 
             var accepted = false;
+            var savedTargetHorseId = 0;
+            var savedParentHorseId = 0;
+            bool TryReadId(TextValidateField field, string label, out int value)
+            {
+                if (string.IsNullOrEmpty(field.Text))
+                {
+                    value = 0;
+                    return true;
+                }
+                if (int.TryParse(field.Text, out value))
+                    return true;
+
+                validation.Text = $"{label} 必须是 0 到 {int.MaxValue} 之间的整数。";
+                return false;
+            }
+
             var save = new Button { Text = "保存", IsDefault = true };
             save.Accepting += (_, e) =>
             {
+                validation.Text = string.Empty;
+                if (!TryReadId(targetHorseId, "要养的马的 CharaId", out savedTargetHorseId)
+                    || !TryReadId(parentHorseId, "另一个种马的 TrainedCharaId", out savedParentHorseId))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
                 accepted = true;
                 application.RequestStop(dialog);
                 e.Handled = true;
@@ -216,8 +229,8 @@ namespace WinSaddleAnalyzer
                 trainedCharaSort.Value
                     ?? throw new InvalidOperationException("WinSaddleAnalyzer 排序状态未选择。"),
                 onlyFavourites.Value == CheckState.Checked,
-                targetHorseId.Value,
-                parentHorseId.Value);
+                savedTargetHorseId,
+                savedParentHorseId);
         }
 
         void LoadSettings()
@@ -312,6 +325,21 @@ namespace WinSaddleAnalyzer
             [property: JsonProperty(Required = Required.Always)]
             int ParentHorseId);
 
+        sealed class NumericIdField : TextValidateField
+        {
+            protected override bool OnPaste(string text)
+            {
+                if (text.AsSpan().IndexOfAnyExceptInRange('0', '9') >= 0)
+                    return true;
+
+                Text = text;
+                return true;
+            }
+
+            protected override bool ShouldRaisePastedEvent(string text)
+                => text.AsSpan().IndexOfAnyExceptInRange('0', '9') < 0;
+        }
+
         public enum TrainedCharaSortOrder
         {
             不排序,
@@ -332,6 +360,28 @@ namespace WinSaddleAnalyzer
             int TrainedCharaId,
             int WinSaddleBonus,
             int Score);
+
+        void ClearPublishedPanels()
+        {
+            if (workspace is not { } target)
+                return;
+
+            if (inheritancePublished)
+            {
+                target.RemovePanel("inheritance");
+                inheritancePublished = false;
+            }
+            if (friendPublished)
+            {
+                target.RemovePanel("friend");
+                friendPublished = false;
+            }
+            if (trainedCharactersPublished)
+            {
+                target.RemovePanel("trained-characters");
+                trainedCharactersPublished = false;
+            }
+        }
 
         void ShowPanel(string key, string title, DisplayResult result)
         {
@@ -362,21 +412,24 @@ namespace WinSaddleAnalyzer
                 ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id == successionTrainedCharaIdMom);
             var mineHorse = TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdDad)
                 ?? TrainedChara.FirstOrDefault(x => x.trained_chara_id != rentalHorse?.trained_chara_id && x.trained_chara_id == successionTrainedCharaIdMom);
+            DisplayResult result;
             if (rentalHorse != null && mineHorse != null)
             {
                 ParentHorseId = mineHorse.trained_chara_id;
                 SaveSettings();
                 ApplyFactorExtend(rentalHorse);
                 ApplyFactorExtend(mineHorse);
-                ShowPanel("inheritance", "相性分析", BuildRelationDisplay(rentalHorse, mineHorse));
+                result = BuildRelationDisplay(rentalHorse, mineHorse);
             }
             else
             {
                 SaveSettings();
                 const string warning = "未找到种马信息，请先查看一次殿堂马再尝试看相性。";
-                ShowPanel("inheritance", "相性分析", new(warning, warning));
+                result = new(warning, warning);
             }
 
+            ClearPublishedPanels();
+            ShowPanel("inheritance", "相性分析", result);
             return ValueTask.CompletedTask;
         }
 
@@ -397,11 +450,13 @@ namespace WinSaddleAnalyzer
             if (CurrentTrainedCharaData is not { } data)
                 return;
 
+            var content = BuildTrainedCharaTable(data);
+            ClearPublishedPanels();
             var target = workspace ??= Workspace.Create(nameof(WinSaddleAnalyzer));
             target.SetPanel(
                 "trained-characters",
                 "殿堂马",
-                BuildTrainedCharaTable(data));
+                content);
             trainedCharactersPublished = true;
         }
 
@@ -460,12 +515,44 @@ namespace WinSaddleAnalyzer
                 };
                 table.Style.AlwaysShowHeaders = true;
                 var scheme = table.GetScheme();
+                var darkRowScheme = new Scheme(scheme)
+                {
+                    Normal = new(
+                        scheme.Normal.Foreground,
+                        new Color(14, 14, 14),
+                        scheme.Normal.Style),
+                };
+                var alternateRowScheme = new Scheme(scheme)
+                {
+                    Normal = new(
+                        scheme.Normal.Foreground,
+                        new Color(41, 55, 67),
+                        scheme.Normal.Style),
+                };
+                CellColorGetterDelegate rowColorGetter = args =>
+                    args.RowIndex % 2 == 0 ? alternateRowScheme : darkRowScheme;
                 table.Style.HeaderScheme = new(scheme) { Focus = scheme.Normal };
                 table.Style.ExpandLastColumn = false;
-                table.Style.ColumnStyles[1] = new() { Alignment = Alignment.End };
-                table.Style.ColumnStyles[2] = new() { Alignment = Alignment.End };
-                table.Style.ColumnStyles[3] = new() { Alignment = Alignment.End };
+                table.Style.ShowVerticalCellLines = false;
+                table.Style.ShowVerticalHeaderLines = true;
+                table.Style.ColumnStyles[0] = new() { ColorGetter = rowColorGetter };
+                table.Style.ColumnStyles[1] = new() { Alignment = Alignment.End, ColorGetter = rowColorGetter };
+                table.Style.ColumnStyles[2] = new() { Alignment = Alignment.End, ColorGetter = rowColorGetter };
+                table.Style.ColumnStyles[3] = new() { Alignment = Alignment.End, ColorGetter = rowColorGetter };
                 table.ViewportSettings |= ViewportSettingsFlags.HasVerticalScrollBar;
+                PopoverMenu? contextMenu = null;
+                TrainedCharaRow? contextRow = null;
+                table.Disposing += (_, _) =>
+                {
+                    if (contextMenu is not { } menu)
+                        return;
+
+                    menu.App?.Popovers?.Hide(menu);
+                    menu.App?.Popovers?.DeRegister(menu);
+                    menu.Dispose();
+                    contextMenu = null;
+                    contextRow = null;
+                };
                 table.MouseEvent += (_, mouse) =>
                 {
                     const MouseFlags leftClicks = MouseFlags.LeftButtonClicked
@@ -486,6 +573,54 @@ namespace WinSaddleAnalyzer
                             table.VerticalScrollBar.Value = 0;
                             return;
                         }
+                    }
+
+                    // ScreenToCell maps the blank viewport after the last column back to that column.
+                    // The generated header width is also the maximum rendered width for the column.
+                    if (mouse.Flags.HasFlag(MouseFlags.RightButtonClicked)
+                        && table.ScreenToCell(
+                            mouse.Position!.Value.X,
+                            mouse.Position.Value.Y,
+                            out int? _,
+                            out var offsetX) is { } cell
+                        && table.Table is EnumerableTableSource<TrainedCharaRow> source
+                        && offsetX is int x
+                        && x <= source.ColumnNames[cell.X].GetColumns())
+                    {
+                        contextRow = source.GetObjectOnRow(cell.Y);
+                        table.Value = new TableSelection(cell);
+                        if (contextMenu is null)
+                        {
+                            var app = table.App
+                                ?? throw new InvalidOperationException(
+                                    "WinSaddleAnalyzer 殿堂马表格必须附加到 Application 后才能显示右键菜单。");
+                            contextMenu = new PopoverMenu(new Menu(new MenuItem[]
+                            {
+                                new("设为种马分析的 TrainedCharaId", action: () =>
+                                {
+                                    if (contextMenu is { } menu)
+                                        menu.Target = null;
+                                    var row = contextRow
+                                        ?? throw new InvalidOperationException(
+                                            "WinSaddleAnalyzer 右键菜单没有对应的殿堂马记录。");
+                                    ParentHorseId = row.TrainedCharaId;
+                                    SaveSettings();
+                                    RefreshParent();
+                                }),
+                            }))
+                            {
+                                App = app,
+                            };
+                            (app.Popovers
+                                ?? throw new InvalidOperationException(
+                                    "WinSaddleAnalyzer 无法注册右键菜单：Application.Popovers 不可用。"))
+                                .Register(contextMenu);
+                        }
+
+                        contextMenu.Target = new WeakReference<View>(table);
+                        contextMenu.MakeVisible(mouse.ScreenPosition);
+                        mouse.Handled = true;
+                        return;
                     }
 
                     var scrollBar = table.VerticalScrollBar;
