@@ -206,17 +206,23 @@ namespace WinSaddleAnalyzer
             CalculateProper(distanceFactorProbe, mineMomDistanceFactors, mineMomTotalRelation);
             rows?.Add($"两次继承概率：{string.Join(',', distanceFactorProbe.Select(x => $"{Database.FactorIds[int.Parse($"{x.Key}1")].Replace("★", string.Empty)}: {1 - x.Value:0.00%}"))}");
 
-            EnsureFactorEffectsLoaded();
+            var result = (friendTotalRelation, friendSingleRelation, friendDadTotalRelation, friendMomTotalRelation, mineTotalRelation, mineSingleRelation, mineDadTotalRelation, mineMomTotalRelation);
             if (SkillEffects.Count == 0)
-                SkillEffects = SkillEffectFileStore.Load();
+            {
+                if (SkillEffectFileStore.LoadIfAvailable() is not { } skillEffects)
+                    return result;
 
+                SkillEffects = skillEffects;
+            }
+
+            EnsureFactorEffectsLoaded();
             var friendSkillFactorProbe = CalculateSkillEffect(friend, friendTotalRelation, friendDadTotalRelation, friendMomTotalRelation);
             rows?.Add($"好友技能期望收益：{friendSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
 
             var mineSkillFactorProbe = CalculateSkillEffect(mineChara, mineTotalRelation, mineDadTotalRelation, mineMomTotalRelation);
             rows?.Add($"自己技能期望收益：{mineSkillFactorProbe.Sum(x => SkillEffects[x.Key] * (1 - x.Value)):0.00}");
 
-            return (friendTotalRelation, friendSingleRelation, friendDadTotalRelation, friendMomTotalRelation, mineTotalRelation, mineSingleRelation, mineDadTotalRelation, mineMomTotalRelation);
+            return result;
         }
         public (int, int, int) SumWinSaddles(TrainedChara chara, IReadOnlyDictionary<int, int[]> targetRelations)
         {

@@ -10,22 +10,22 @@ internal static class SkillEffectFileStore
         PropertyNameCaseInsensitive = true
     };
 
-    public static Dictionary<string, double> Load()
+    public static Dictionary<string, double>? LoadIfAvailable()
     {
         var dataDirectory = Path.Combine("PluginData", "SkillEffectPlugin");
         var settingsPath = Path.Combine(dataDirectory, "settings.json");
         if (!File.Exists(settingsPath))
-            throw new FileNotFoundException("WinSaddleAnalyzer 需要读取 SkillEffectPlugin 配置，请先配置并更新 SkillEffectPlugin。", settingsPath);
+            return null;
 
         var settings = JsonSerializer.Deserialize<SkillEffectSettings>(File.ReadAllText(settingsPath), JsonOptions)
             ?? throw new InvalidDataException($"SkillEffectPlugin 配置文件反序列化结果为空: {settingsPath}");
 
         if (string.IsNullOrWhiteSpace(settings.Race) || string.IsNullOrWhiteSpace(settings.RunningStyle))
-            throw new InvalidOperationException($"SkillEffectPlugin 尚未配置 Race/RunningStyle，无法为 WinSaddleAnalyzer 计算技能期望收益。配置文件: {settingsPath}");
+            return null;
 
         var effectPath = Path.Combine(dataDirectory, settings.Race, $"{settings.RunningStyle}.json");
         if (!File.Exists(effectPath))
-            throw new FileNotFoundException("WinSaddleAnalyzer 未找到 SkillEffectPlugin 技能收益表，请先在 SkillEffectPlugin 中执行更新。", effectPath);
+            return null;
 
         var items = JsonSerializer.Deserialize<SkillEffectFileItem[]>(File.ReadAllText(effectPath), JsonOptions)
             ?? throw new InvalidDataException($"SkillEffectPlugin 技能收益表反序列化结果为空: {effectPath}");
