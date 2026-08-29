@@ -7,3 +7,11 @@
 殿堂马、好友和单独相性分析按响应组替换 Workspace 中已有的插件面板；完整好友响应同组显示“好友”和“相性分析”。
 
 SkillEffectPlugin 未配置或收益表尚未生成时，相性分析省略技能期望收益，其余结果正常显示。
+
+## 构建
+
+```powershell
+git -c core.longpaths=true submodule update --init --recursive
+dotnet build .\WinSaddleAnalyzer.csproj -c Release -m:1 -p:RuntimeIdentifier=win-x64 -p:SelfContained=false -p:PlatformTarget=AnyCPU -p:DeployUraPluginToLocalAppDataOnBuild=false
+dotnet run --project .\tests\WinSaddleAnalyzerSmoke\WinSaddleAnalyzerSmoke.csproj -c Release -p:GenerateUraPluginManifestOnBuild=false -p:PackageUraPluginOnBuild=false -p:DeployUraPluginToLocalAppDataOnBuild=false
+```
