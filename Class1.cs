@@ -70,10 +70,11 @@ namespace WinSaddleAnalyzer
             RefreshParent();
         }
 
-        public void Dispose()
+        public ValueTask DisposeAsync()
         {
             ClearPublishedPanels();
             workspace = null;
+            return ValueTask.CompletedTask;
         }
 
         public async Task ConfigPromptAsync(

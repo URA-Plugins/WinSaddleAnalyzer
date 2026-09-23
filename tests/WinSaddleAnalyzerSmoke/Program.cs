@@ -128,7 +128,7 @@ static void AssertInitializeDoesNotRequireFactorEffectData(WorkspaceSmokeSession
             ReferenceEquals(Workspace.Current, ui.Bootstrap)
             && string.Equals(before, ui.CaptureScreen(), StringComparison.Ordinal),
             "Initialize must not change the visible workspace or framebuffer.");
-        plugin.Dispose();
+        plugin.DisposeAsync().GetAwaiter().GetResult();
         Assert(
             ReferenceEquals(Workspace.Current, ui.Bootstrap)
             && string.Equals(before, ui.CaptureScreen(), StringComparison.Ordinal),
@@ -220,10 +220,10 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
         var visibleFriend = ui.CaptureScreen();
         Assert(
             visibleFriend.Contains("好友", StringComparison.Ordinal)
-            && visibleFriend.Contains("WARN ", StringComparison.Ordinal)
+            && visibleFriend.Contains("未找到种马信息", StringComparison.Ordinal)
             && !visibleFriend.Contains("TrainedCharaId", StringComparison.Ordinal)
             && !visibleFriend.Contains("相性分析", StringComparison.Ordinal),
-            "The simple-friend output group must replace prior panels without clearing notifications.");
+            $"The simple-friend output group must replace prior panels without clearing notifications. Screen:{Environment.NewLine}{visibleFriend}");
 
         plugin.AnalyzeFriendSearchResponse(CreateFriendSearchResponse()).GetAwaiter().GetResult();
         var fullFriendFrame = ui.CaptureScreen();
@@ -289,7 +289,7 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
         Assert(settings.Value<int>("TargetHorseId") == 1001, "Start response must persist the derived TargetHorseId.");
         Assert(settings.Value<int>("ParentHorseId") == 0, "Missing parents must preserve ParentHorseId.");
 
-        plugin.Dispose();
+        plugin.DisposeAsync().GetAwaiter().GetResult();
         target.SwitchTo();
         var disposed = ui.CaptureScreen();
         Assert(
@@ -301,7 +301,7 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
     }
     finally
     {
-        plugin?.Dispose();
+        plugin?.DisposeAsync().GetAwaiter().GetResult();
         if (target is not null)
         {
             target.RemovePanel("trained-characters");
@@ -358,7 +358,7 @@ static async Task AssertOptionalSkillExpectedEffects(WorkspaceSmokeSession ui)
             : throw new InvalidOperationException("Skill-effect smoke did not publish its trained-character fixture.");
         var friendResponse = CreateSkillEffectFriendSearchResponse(factorId);
         var existingWarningCount = ui.CaptureScreen(160, 50)
-            .Split("WARN ", StringSplitOptions.None)
+            .Split("警告", StringSplitOptions.None)
             .Length - 1;
 
         plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult();
@@ -415,7 +415,7 @@ static async Task AssertOptionalSkillExpectedEffects(WorkspaceSmokeSession ui)
     }
     finally
     {
-        plugin?.Dispose();
+        plugin?.DisposeAsync().GetAwaiter().GetResult();
         if (target is not null)
         {
             target.RemovePanel("trained-characters");
@@ -440,7 +440,7 @@ static void AssertSkillEffectsUnavailable(
         && screen.Contains("单次继承概率", StringComparison.Ordinal)
         && screen.Contains("两次继承概率", StringComparison.Ordinal)
         && !screen.Contains("技能期望收益", StringComparison.Ordinal)
-        && screen.Split("WARN ", StringSplitOptions.None).Length - 1 == expectedWarningCount,
+        && screen.Split("警告", StringSplitOptions.None).Length - 1 == expectedWarningCount,
         $"{operation} must publish the core inheritance result without skill-effect rows or new warnings.");
 }
 
@@ -718,7 +718,7 @@ static async Task AssertTrainedCharaSortingAndConfigurationSynchronization(Works
         AssertCanceled(plugin.ConfigPromptAsync(application), "Closing must cancel the sorting draft.");
         AssertUnchangedSortDraft(ui, target, plugin, settingsPath, baseline, "Close");
 
-        plugin.Dispose();
+        plugin.DisposeAsync().GetAwaiter().GetResult();
         ui.Flush();
         Assert(
             hostPopovers.Popovers.Count == baselinePopoverCount,
@@ -733,12 +733,12 @@ static async Task AssertTrainedCharaSortingAndConfigurationSynchronization(Works
         Assert(restarted.TrainedCharaSort == SortOrder.分数降序, "Plugin restart must load the persisted sort state.");
         restarted.AnalyzeTrainedCharaLoadResponse(response).GetAwaiter().GetResult();
         AssertPublishedTrainedState(ui, target, SortOrder.分数降序, "Plugin restart");
-        restarted.Dispose();
+        restarted.DisposeAsync().GetAwaiter().GetResult();
     }
     finally
     {
-        restarted?.Dispose();
-        plugin?.Dispose();
+        restarted?.DisposeAsync().GetAwaiter().GetResult();
+        plugin?.DisposeAsync().GetAwaiter().GetResult();
         target?.RemovePanel("trained-characters");
         Directory.SetCurrentDirectory(originalCwd);
         Directory.Delete(workspace, recursive: true);
@@ -983,7 +983,7 @@ static int AssertSingleContextMenuSelection(
 
     var menuStillVisible = after.Text.Contains(menuText, StringComparison.Ordinal);
     var successTextVisible = after.Text.Contains("已设置", StringComparison.Ordinal);
-    var successSeverityVisible = after.Text.Contains("OK ", StringComparison.Ordinal);
+    var successSeverityVisible = after.Text.Contains("成功", StringComparison.Ordinal);
     Assert(
         !menuStillVisible && !successTextVisible && !successSeverityVisible,
         $"The context action must close silently without a success notification. "
@@ -1256,7 +1256,7 @@ static void AssertLegacySortingConfigurationFailsFast(WorkspaceSmokeSession ui)
         }
         finally
         {
-            plugin.Dispose();
+            plugin.DisposeAsync().GetAwaiter().GetResult();
         }
     }
     finally
@@ -1394,7 +1394,7 @@ static void AssertConfigurationDraftSemantics(WorkspaceSmokeSession ui)
         AssertCanceled(plugin.ConfigPromptAsync(application), "Closing the dialog must cancel the draft.");
         Assert(baseline.SequenceEqual(File.ReadAllBytes(settingsPath)), "Closing the dialog must not write the draft.");
 
-        plugin.Dispose();
+        plugin.DisposeAsync().GetAwaiter().GetResult();
     }
     finally
     {
