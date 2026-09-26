@@ -21,6 +21,7 @@ using PluginType = WinSaddleAnalyzer.WinSaddleAnalyzer;
 using SortOrder = WinSaddleAnalyzer.WinSaddleAnalyzer.TrainedCharaSortOrder;
 using TColor = Terminal.Gui.Drawing.Color;
 using TrainedCharaI18n = WinSaddleAnalyzer.i18n.ParseTrainedCharaLoadResponse;
+using UiText = UmamusumeResponseAnalyzer.Localization.TerminalGui;
 using UraDatabase = UmamusumeResponseAnalyzer.Database;
 
 var failures = new List<string>();
@@ -296,7 +297,7 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
             ReferenceEquals(Workspace.Create("WINSADDLEANALYZER"), target),
             "Dispose must retain the canonical WinSaddleAnalyzer workspace generation.");
         Assert(
-            disposed.Contains("WinSaddleAnalyzer 还没有输出。", StringComparison.Ordinal),
+            disposed.Contains(ui.InvokeOnOwner(() => string.Format(UiText.Workspace_NoOutput, target.DisplayTitle)), StringComparison.Ordinal),
             "Dispose must explicitly remove every panel key published by WinSaddleAnalyzer.");
     }
     finally
@@ -725,7 +726,7 @@ static async Task AssertTrainedCharaSortingAndConfigurationSynchronization(Works
             "Disposing WinSaddleAnalyzer must de-register the trained-character context menu.");
         target.SwitchTo();
         Assert(
-            ui.CaptureScreen().Contains("WinSaddleAnalyzer 还没有输出。", StringComparison.Ordinal),
+            ui.CaptureScreen().Contains(ui.InvokeOnOwner(() => string.Format(UiText.Workspace_NoOutput, target.DisplayTitle)), StringComparison.Ordinal),
             "Dispose must explicitly remove the trained-character panel.");
         using var restartedContext = new RuntimePluginContext(ui.Application);
         restarted = new PluginType();
