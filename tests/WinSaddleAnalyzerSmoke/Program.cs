@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
@@ -24,8 +25,14 @@ using TrainedCharaI18n = WinSaddleAnalyzer.i18n.ParseTrainedCharaLoadResponse;
 using UiText = UmamusumeResponseAnalyzer.Localization.TerminalGui;
 using UraDatabase = UmamusumeResponseAnalyzer.Database;
 
+RepositoryChecks.Run();
+Environment.SetEnvironmentVariable("DisableRealDriverIO", "1");
+CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("zh-CN");
+CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("zh-CN");
+
 var failures = new List<string>();
 using var ui = new WorkspaceSmokeSession();
+PluginLifecycleSmoke.Run(ui);
 
 Check("project build contract", AssertProjectBuildContract);
 Check("initialize without factor effect data", () => AssertInitializeDoesNotRequireFactorEffectData(ui));
@@ -221,6 +228,7 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
         var visibleFriend = ui.CaptureScreen();
         Assert(
             visibleFriend.Contains("好友", StringComparison.Ordinal)
+            && visibleFriend.Contains("simple friend", StringComparison.Ordinal)
             && visibleFriend.Contains("未找到种马信息", StringComparison.Ordinal)
             && !visibleFriend.Contains("TrainedCharaId", StringComparison.Ordinal)
             && !visibleFriend.Contains("相性分析", StringComparison.Ordinal),
@@ -846,9 +854,9 @@ static void AssertHeaderSorting(
             scrolledIds.Length > 0
             && scrolledOffset > 0
             && scrolledIds.SequenceEqual(test.AscendingIds.Skip(scrolledOffset).Take(scrolledIds.Length)),
-            $"{test.Title} wheel input must move the real sorted viewport away from its first row.");
+            $"{test.Title} wheel input must move the real sorted viewport away from its first row. Visible=[{string.Join(",", scrolledIds)}].\n{scrolled.Text}");
 
-        var canceled = ClickPublishedHeader(ui, test.Title, MouseFlags.LeftButtonTripleClicked, 16);
+        var canceled = ClickPublishedHeader(ui, test.Title, MouseFlags.LeftButtonTripleClicked, 12);
         Assert(plugin.TrainedCharaSort == SortOrder.不排序, $"{test.Title} third click must cancel sorting.");
         AssertSettingsSort(settingsPath, SortOrder.不排序, $"{test.Title} third click");
         AssertPublishedHeaderState(canceled, titles, headerStarts, null, null, $"{test.Title} canceled");
@@ -1074,7 +1082,7 @@ static WinSaddleFrame ScrollPublishedTable(WorkspaceSmokeSession ui, string titl
                 Flags = MouseFlags.WheeledDown
             });
         }
-    }, 16);
+    }, 12);
 
 static int[] GetPublishedHeaderStarts(WinSaddleFrame frame, IReadOnlyList<string> titles)
     => [.. titles.Select(title => FindScreenPoint(frame.Text, title).X)];
