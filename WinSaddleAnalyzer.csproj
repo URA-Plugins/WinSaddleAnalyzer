@@ -5,12 +5,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2026.9.26.1</Version>
+    <Version>2026.10.31</Version>
 
     <!-- URA 插件元数据：供发布 manifest 使用 -->
     <PluginInternalName>WinSaddleAnalyzer</PluginInternalName>
     <PluginDisplayName>显示殿堂马&amp;好友种马信息</PluginDisplayName>
     <PluginAuthor>离披</PluginAuthor>
+    <PluginChangelog>支持日服数组与台服单个代表的好友响应；更新构建依赖。</PluginChangelog>
     <PluginRepositoryUrl>https://github.com/URA-Plugins/WinSaddleAnalyzer</PluginRepositoryUrl>
   </PropertyGroup>
 

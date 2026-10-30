@@ -6,10 +6,8 @@ namespace WinSaddleAnalyzer
 {
     public partial class WinSaddleAnalyzer
     {
-        public void ParseFriendSearchResponse(Gallop.FriendSearchResponse @event)
+        void ParseFriendSearchResponse(FriendResponseData data, TrainedChara chara)
         {
-            var data = @event.data;
-            var chara = data.partner_chara_info_array[0];
             // 每个相同的重赏胜场加3胜鞍加成
             var charaWinSaddle = chara.win_saddle_id_array.Intersect(Database.SaddleIds);
             var parentWinSaddle_a = chara.succession_chara_array[0].win_saddle_id_array.Intersect(Database.SaddleIds);
@@ -21,7 +19,7 @@ namespace WinSaddleAnalyzer
 
             var rows = new List<string>
             {
-                string.Format(I18N_Friend, data.user_info_summary.name, data.user_info_summary.viewer_id, data.follower_num),
+                string.Format(I18N_Friend, data.UserInfo.Name, data.UserInfo.ViewerId, data.FollowerCount),
                 string.Format(
                     I18N_Uma,
                     Database.Names.TryGetUmamusume(chara.card_id, out var uma)
@@ -46,12 +44,11 @@ namespace WinSaddleAnalyzer
             ShowPanel("friend", "好友", friendResult);
             ShowPanel("inheritance", "相性分析", inheritanceResult);
         }
-        public void ParseFriendSearchResponseSimple(UserInfoAtFriend userInfo)
+        void ParseFriendSearchResponseSimple(FriendUserInfo userInfo, UserTrainedCharaAtFriend chara)
         {
-            var chara = userInfo.user_trained_chara_array[0];
             var rows = new List<string>
             {
-                string.Format(I18N_FriendSimple, userInfo.name, userInfo.viewer_id),
+                string.Format(I18N_FriendSimple, userInfo.Name, userInfo.ViewerId),
                 string.Format(
                     I18N_UmaSimple,
                     Database.Names.TryGetUmamusume(chara.card_id, out var uma)

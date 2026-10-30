@@ -53,7 +53,7 @@ namespace WinSaddleAnalyzer
         /// </summary>
         internal static TrainedChara? Parent { get; set; } = default!;
 
-        public void Initialize(IPluginContext _)
+        public void Initialize(IPluginContext context)
         {
             PLUGIN_DATA_DIRECTORY = DataDirectory;
             Directory.CreateDirectory(PLUGIN_DATA_DIRECTORY);
@@ -68,6 +68,14 @@ namespace WinSaddleAnalyzer
                 : [];
 
             RefreshParent();
+            context.Analyzers.Register<ReadOnlyMemory<byte>>(
+                AnalyzerKind.Response,
+                [EndpointPattern.Exact("/umamusume/friend/search")],
+                AnalyzeFriendSearchResponse);
+            context.Analyzers.Register<ReadOnlyMemory<byte>>(
+                AnalyzerKind.Response,
+                [EndpointPattern.Exact("/umamusume/friend/simple_search")],
+                AnalyzeFriendSimpleSearchResponse);
         }
 
         public ValueTask DisposeAsync()
@@ -461,21 +469,26 @@ namespace WinSaddleAnalyzer
             trainedCharactersPublished = true;
         }
 
-        [ResponseAnalyzer<GameApi.Friend.Search>]
-        public ValueTask AnalyzeFriendSearchResponse(FriendSearchResponse response)
+        ValueTask AnalyzeFriendSearchResponse(AnalyzerInvocation<ReadOnlyMemory<byte>> invocation)
         {
-            var data = response.data;
-            if (data.partner_chara_info_array is { Length: > 0 })
-                ParseFriendSearchResponse(response);
+            var data = FriendResponse.Read(invocation.Payload, invocation.Endpoint.Path);
+            var chara = data.PartnerCharacters is { Length: > 0 } characters
+                ? characters[0]
+                : data.PracticePartner;
+            if (chara is not null)
+                ParseFriendSearchResponse(data, chara);
 
             return ValueTask.CompletedTask;
         }
 
-        [ResponseAnalyzer<GameApi.Friend.SimpleSearch>]
-        public ValueTask AnalyzeFriendSimpleSearchResponse(FriendSimpleSearchResponse response)
+        ValueTask AnalyzeFriendSimpleSearchResponse(AnalyzerInvocation<ReadOnlyMemory<byte>> invocation)
         {
-            if (response.data.user_info_summary.user_trained_chara_array is { Length: > 0 })
-                ParseFriendSearchResponseSimple(response.data.user_info_summary);
+            var userInfo = FriendResponse.Read(invocation.Payload, invocation.Endpoint.Path).UserInfo;
+            var chara = userInfo.TrainedCharacters is { Length: > 0 } characters
+                ? characters[0]
+                : userInfo.TrainedCharacter;
+            if (chara is not null)
+                ParseFriendSearchResponseSimple(userInfo, chara);
 
             return ValueTask.CompletedTask;
         }

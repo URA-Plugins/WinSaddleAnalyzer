@@ -1,0 +1,17 @@
+{
+  "data": {
+    "user_info_summary": {
+      "name": "测试简略好友",
+      "viewer_id": 987654321,
+      "user_trained_chara": {
+        "trained_chara_id": 900003,
+        "card_id": 100200,
+        "factor_info_array": [
+          { "factor_id": 200001 },
+          { "factor_id": 200101 },
+          { "factor_id": 200201 }
+        ]
+      }
+    }
+  }
+}

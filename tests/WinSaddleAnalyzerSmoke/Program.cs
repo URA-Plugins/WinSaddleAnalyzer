@@ -4,6 +4,9 @@ using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
 using Gallop;
+using Gallop.Endpoints;
+using MessagePack;
+using UmamusumeResponseAnalyzer.Plugin;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -41,6 +44,7 @@ await CheckAsync("trained-character sorting and configuration synchronization", 
 Check("legacy sorting configuration fails fast", () => AssertLegacySortingConfigurationFailsFast(ui));
 Check("configuration draft save and cancel", () => AssertConfigurationDraftSemantics(ui));
 await CheckAsync("optional skill expected effects", () => AssertOptionalSkillExpectedEffects(ui));
+await CheckAsync("friend protocols through fresh ZIP", () => FriendProtocolSmoke.Run(ui));
 
 if (failures.Count != 0)
 {
@@ -219,7 +223,7 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
             && !inheritanceFrame.Contains("好友", StringComparison.Ordinal),
             "The inheritance analyzer must replace the trained-character output group.");
 
-        plugin.AnalyzeFriendSimpleSearchResponse(CreateFriendSimpleSearchResponse()).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, CreateFriendSimpleSearchResponse()).GetAwaiter().GetResult();
 
         Assert(
             ReferenceEquals(Workspace.Create("winsaddleanalyzer"), target)
@@ -234,7 +238,7 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
             && !visibleFriend.Contains("相性分析", StringComparison.Ordinal),
             $"The simple-friend output group must replace prior panels without clearing notifications. Screen:{Environment.NewLine}{visibleFriend}");
 
-        plugin.AnalyzeFriendSearchResponse(CreateFriendSearchResponse()).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, CreateFriendSearchResponse()).GetAwaiter().GetResult();
         var fullFriendFrame = ui.CaptureScreen();
         Assert(
             ReferenceEquals(Workspace.Current, target)
@@ -243,11 +247,11 @@ static async Task AssertWorkspacePublicationsAndPersistence(WorkspaceSmokeSessio
             && !fullFriendFrame.Contains("TrainedCharaId", StringComparison.Ordinal),
             "The full-friend output group must contain friend and inheritance panels but no trained-character panel.");
 
-        plugin.AnalyzeFriendSearchResponse(new()
+        DispatchFriendResponse(context, new FriendSearchResponse()
         {
-            data = new() { partner_chara_info_array = [] }
+            data = new() { user_info_summary = new(), partner_chara_info_array = [] }
         }).GetAwaiter().GetResult();
-        plugin.AnalyzeFriendSimpleSearchResponse(new()
+        DispatchFriendResponse(context, new FriendSimpleSearchResponse()
         {
             data = new()
             {
@@ -370,22 +374,22 @@ static async Task AssertOptionalSkillExpectedEffects(WorkspaceSmokeSession ui)
             .Split("警告", StringSplitOptions.None)
             .Length - 1;
 
-        plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult();
         AssertSkillEffectsUnavailable(ui, target, existingWarningCount, "missing SkillEffectPlugin settings");
 
         var skillEffectDirectory = Path.Combine(workspace, "PluginData", "SkillEffectPlugin");
         var settingsPath = Path.Combine(skillEffectDirectory, "settings.json");
         WriteSkillEffectSettings(settingsPath, string.Empty, string.Empty);
-        plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult();
         AssertSkillEffectsUnavailable(ui, target, existingWarningCount, "blank Race and RunningStyle");
 
         WriteSkillEffectSettings(settingsPath, "missing-course", "missing-style");
-        plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult();
         AssertSkillEffectsUnavailable(ui, target, existingWarningCount, "missing selected skill-effect table");
 
         File.WriteAllText(settingsPath, "{");
         AssertThrows<System.Text.Json.JsonException>(
-            () => plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult(),
+            () => DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult(),
             "Malformed SkillEffectPlugin settings must fail explicitly.");
 
         const string race = "test-course";
@@ -397,24 +401,24 @@ static async Task AssertOptionalSkillExpectedEffects(WorkspaceSmokeSession ui)
 
         File.WriteAllText(effectPath, "{");
         AssertThrows<System.Text.Json.JsonException>(
-            () => plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult(),
+            () => DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult(),
             "Malformed skill-effect table JSON must fail explicitly.");
 
         File.WriteAllText(effectPath, "[]");
         AssertThrows<InvalidDataException>(
-            () => plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult(),
+            () => DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult(),
             "An empty skill-effect table must fail explicitly.");
 
         File.WriteAllText(effectPath, "[{\"Name\":\"\",\"Effect\":\"1.50\"}]");
         AssertThrows<InvalidDataException>(
-            () => plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult(),
+            () => DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult(),
             "A skill-effect table with an invalid entry must fail explicitly.");
 
         WriteBrotliJson(
             Path.Combine(workspace, "factor_effects.br"),
             new[] { new { index = factorId, text = "「测试技能」のスキルヒント" } });
         File.WriteAllText(effectPath, "[{\"Name\":\"测试技能\",\"Effect\":\"1.50\"}]");
-        plugin.AnalyzeFriendSearchResponse(friendResponse).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, friendResponse).GetAwaiter().GetResult();
         var recovered = ui.CaptureScreen(160, 50);
         Assert(
             ReferenceEquals(Workspace.Current, target)
@@ -672,7 +676,7 @@ static async Task AssertTrainedCharaSortingAndConfigurationSynchronization(Works
             .Init(DriverRegistry.Names.ANSI);
         application.Driver!.SetScreenSize(100, 30);
 
-        plugin.AnalyzeFriendSimpleSearchResponse(CreateFriendSimpleSearchResponse()).GetAwaiter().GetResult();
+        DispatchFriendResponse(context, CreateFriendSimpleSearchResponse()).GetAwaiter().GetResult();
         var beforeSaveScreen = ui.CaptureScreen();
         Assert(
             beforeSaveScreen.Contains("好友", StringComparison.Ordinal)
@@ -1504,6 +1508,15 @@ static void WriteBrotliJson<T>(string path, T value, JsonSerializerSettings? set
     using var writer = new StreamWriter(brotli, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     using var json = new JsonTextWriter(writer);
     (settings is null ? JsonSerializer.CreateDefault() : JsonSerializer.Create(settings)).Serialize(json, value);
+}
+
+static ValueTask DispatchFriendResponse(RuntimePluginContext context, object response)
+{
+    var endpoint = GameEndpointCatalog.ByEndpointType.Values.Single(x => x.ResponseType == response.GetType());
+    var registration = context.AnalyzerRegistry.Registrations.Single(x =>
+        x.Kind == AnalyzerKind.Response && x.Patterns.Single() == EndpointPattern.Exact(endpoint.Path));
+    return registration.Invoke(new UmamusumeResponseAnalyzer.AnalyzerDispatchContext(
+        endpoint, MessagePackSerializer.Serialize(response.GetType(), response), new(null, null, null, null, null, null)));
 }
 
 static FriendSimpleSearchResponse CreateFriendSimpleSearchResponse() => new()
