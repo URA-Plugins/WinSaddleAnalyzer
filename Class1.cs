@@ -21,7 +21,8 @@ namespace WinSaddleAnalyzer
     public partial class WinSaddleAnalyzer : IPlugin
     {
         public string DataDirectory => Path.Combine("PluginData", nameof(WinSaddleAnalyzer));
-        public string SettingsFilePath => Path.Combine("PluginData", nameof(WinSaddleAnalyzer), "settings.json");
+        public string SettingsFilePath => Path.Combine(DataDirectory, "settings.json");
+        string TrainedCharaFilePath => Path.Combine(DataDirectory, "trained_chara.json");
 
         public TrainedCharaSortOrder TrainedCharaSort { get; set; } = TrainedCharaSortOrder.不排序;
         public bool OnlyFavourites { get; set; } = true;
@@ -40,11 +41,6 @@ namespace WinSaddleAnalyzer
             Converters = { new StringEnumConverter { AllowIntegerValues = false } },
         };
 
-        internal string PLUGIN_DATA_DIRECTORY = string.Empty;
-        internal string DATABASE_DIRECTORY = string.Empty;
-        internal string SETTINGS_FILEPATH = string.Empty;
-        internal string TRAINED_CHARA_FILEPATH = string.Empty;
-        internal string FACTOR_EFFECT_FILEPATH = string.Empty;
         internal TrainedChara[] TrainedChara = [];
         internal Dictionary<int, string> FactorEffects = [];
         internal Dictionary<string, double> SkillEffects = [];
@@ -55,16 +51,15 @@ namespace WinSaddleAnalyzer
 
         public void Initialize(IPluginContext context)
         {
-            PLUGIN_DATA_DIRECTORY = DataDirectory;
-            Directory.CreateDirectory(PLUGIN_DATA_DIRECTORY);
-            DATABASE_DIRECTORY = Directory.GetCurrentDirectory();
-            SETTINGS_FILEPATH = SettingsFilePath;
-            TRAINED_CHARA_FILEPATH = Path.Combine(PLUGIN_DATA_DIRECTORY, "trained_chara.json");
-            FACTOR_EFFECT_FILEPATH = Path.Combine(DATABASE_DIRECTORY, "factor_effects.br");
-            LoadSettings();
+            Directory.CreateDirectory(DataDirectory);
+            var settings = LoadSettings();
+            TrainedCharaSort = settings.TrainedCharaSort;
+            OnlyFavourites = settings.OnlyFavourites;
+            TargetHorseId = settings.TargetHorseId;
+            ParentHorseId = settings.ParentHorseId;
 
-            TrainedChara = File.Exists(TRAINED_CHARA_FILEPATH)
-                ? JsonConvert.DeserializeObject<TrainedChara[]>(File.ReadAllText(TRAINED_CHARA_FILEPATH)) ?? []
+            TrainedChara = File.Exists(TrainedCharaFilePath)
+                ? JsonConvert.DeserializeObject<TrainedChara[]>(File.ReadAllText(TrainedCharaFilePath)) ?? []
                 : [];
 
             RefreshParent();
@@ -96,7 +91,7 @@ namespace WinSaddleAnalyzer
                 throw new InvalidOperationException(
                     "WinSaddleAnalyzer 无法从非 UI thread 启动配置：Terminal.Gui 当前没有正在运行的 session。");
 
-            var draft = new WinSaddleSettings(TrainedCharaSort, OnlyFavourites, TargetHorseId, ParentHorseId);
+            var draft = LoadSettings();
             WinSaddleSettings saved;
             if (Environment.CurrentManagedThreadId == application.MainThreadId)
             {
@@ -242,23 +237,24 @@ namespace WinSaddleAnalyzer
                 savedParentHorseId);
         }
 
-        void LoadSettings()
+        WinSaddleSettings LoadSettings()
         {
-            if (!File.Exists(SETTINGS_FILEPATH)) return;
+            if (!File.Exists(SettingsFilePath))
+                return new(TrainedCharaSort, OnlyFavourites, TargetHorseId, ParentHorseId);
 
             WinSaddleSettings settings;
             try
             {
                 settings = JsonConvert.DeserializeObject<WinSaddleSettings>(
-                        File.ReadAllText(SETTINGS_FILEPATH),
+                        File.ReadAllText(SettingsFilePath),
                         SettingsJson)
                     ?? throw new InvalidDataException(
-                        $"WinSaddleAnalyzer 配置文件反序列化失败: {SETTINGS_FILEPATH}");
+                        $"WinSaddleAnalyzer 配置文件反序列化失败: {SettingsFilePath}");
             }
             catch (JsonException ex)
             {
                 throw new InvalidDataException(
-                    $"WinSaddleAnalyzer 配置文件无效: {SETTINGS_FILEPATH}。{ex.Message}",
+                    $"WinSaddleAnalyzer 配置文件无效: {SettingsFilePath}。{ex.Message}",
                     ex);
             }
 
@@ -266,22 +262,19 @@ namespace WinSaddleAnalyzer
                 throw new InvalidDataException(
                     $"WinSaddleAnalyzer 配置文件包含无效排序状态: {settings.TrainedCharaSort}。");
 
-            TrainedCharaSort = settings.TrainedCharaSort;
-            OnlyFavourites = settings.OnlyFavourites;
-            TargetHorseId = settings.TargetHorseId;
-            ParentHorseId = settings.ParentHorseId;
+            return settings;
         }
 
         void SaveSettings()
         {
-            Directory.CreateDirectory(PLUGIN_DATA_DIRECTORY);
+            Directory.CreateDirectory(DataDirectory);
             var settings = new WinSaddleSettings(
                 TrainedCharaSort,
                 OnlyFavourites,
                 TargetHorseId,
                 ParentHorseId);
             File.WriteAllText(
-                SETTINGS_FILEPATH,
+                SettingsFilePath,
                 JsonConvert.SerializeObject(settings, Formatting.Indented, SettingsJson));
         }
 
@@ -309,7 +302,7 @@ namespace WinSaddleAnalyzer
             if (FactorEffects.Count != 0)
                 return;
 
-            var factorEffects = JArray.Parse(ReadBrotliUtf8(FACTOR_EFFECT_FILEPATH));
+            var factorEffects = JArray.Parse(ReadBrotliUtf8(Path.GetFullPath("factor_effects.br")));
             var regex = FactorEffectRegex();
             var localEffects = new Dictionary<int, string>();
             foreach (var effect in factorEffects)
@@ -449,7 +442,7 @@ namespace WinSaddleAnalyzer
             CurrentTrainedCharaData = data;
             TrainedChara = data.trained_chara_array;
             RefreshParent();
-            File.WriteAllText(TRAINED_CHARA_FILEPATH, JsonConvert.SerializeObject(data.trained_chara_array));
+            File.WriteAllText(TrainedCharaFilePath, JsonConvert.SerializeObject(data.trained_chara_array));
             PublishTrainedCharaTable();
             return ValueTask.CompletedTask;
         }

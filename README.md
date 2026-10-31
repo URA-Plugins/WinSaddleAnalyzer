@@ -4,6 +4,8 @@
 
 配置中的“要养的马的 CharaId”和“另一个种马的 TrainedCharaId”只接受 `0-9`；空输入保存为 `0`。
 
+配置窗口从 `PluginData/WinSaddleAnalyzer/settings.json` 读取已有设置，只有保存才写入；启动前也可配置。
+
 殿堂马、好友和单独相性分析按响应组替换 Workspace 中已有的插件面板；完整好友响应同组显示“好友”和“相性分析”。
 
 SkillEffectPlugin 未配置或收益表尚未生成时，相性分析省略技能期望收益，其余结果正常显示。
