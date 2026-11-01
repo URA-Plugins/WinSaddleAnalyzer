@@ -5,13 +5,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2026.10.31.1</Version>
+    <Version>2026.11.1</Version>
 
     <!-- URA 插件元数据：供发布 manifest 使用 -->
     <PluginInternalName>WinSaddleAnalyzer</PluginInternalName>
     <PluginDisplayName>显示殿堂马&amp;好友种马信息</PluginDisplayName>
     <PluginAuthor>离披</PluginAuthor>
-    <PluginChangelog>修复启动前配置保存失败及已有配置未载入的问题。</PluginChangelog>
+    <PluginChangelog>start 使用育成通配入口，覆盖 Festa。</PluginChangelog>
     <PluginRepositoryUrl>https://github.com/URA-Plugins/WinSaddleAnalyzer</PluginRepositoryUrl>
   </PropertyGroup>
 

@@ -71,6 +71,10 @@ namespace WinSaddleAnalyzer
                 AnalyzerKind.Response,
                 [EndpointPattern.Exact("/umamusume/friend/simple_search")],
                 AnalyzeFriendSimpleSearchResponse);
+            context.Analyzers.Register<SingleModeStartResponse>(
+                AnalyzerKind.Response,
+                [EndpointPattern.Wildcard("/umamusume/single_mode*/start")],
+                invocation => AnalyzeSingleModeStart(invocation.Payload));
         }
 
         public ValueTask DisposeAsync()
@@ -397,7 +401,6 @@ namespace WinSaddleAnalyzer
                 target.Notify(warning, UiSeverity.Warning);
         }
 
-        [ResponseAnalyzer<GameApi.SingleMode.Start>]
         public ValueTask AnalyzeSingleModeStart(SingleModeStartResponse response)
         {
             var singleModeStartCommon = response.data.single_mode_start_common;

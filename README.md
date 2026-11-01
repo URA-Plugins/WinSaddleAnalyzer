@@ -8,6 +8,8 @@
 
 殿堂马、好友和单独相性分析按响应组替换 Workspace 中已有的插件面板；完整好友响应同组显示“好友”和“相性分析”。
 
+育成开局通过 `/umamusume/single_mode*/start` 的共用 DTO 读取继承信息，包含普通育成与 Festa；每个入口只处理一次。
+
 SkillEffectPlugin 未配置或收益表尚未生成时，相性分析省略技能期望收益，其余结果正常显示。
 
 好友分析支持日服数组协议和繁中服单种马协议：完整好友读取 `partner_chara_info_array` 或 `practice_partner_info`，简略好友读取 `user_trained_chara_array` 或 `user_trained_chara`。日服数组取第一个代表；没有代表马时保留已有面板。
